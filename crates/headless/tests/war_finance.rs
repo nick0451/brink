@@ -1,5 +1,5 @@
-//! Issue 21: wars are financed by debt (D90). The economic-warfare grudge
-//! renewal is held until wars run long enough to make it fire (D83, D90).
+//! Issue 21 (D90): wars are financed by debt. D92: flooding the oil market
+//! against an indebted exporting neighbour renews its grudge (economic warfare).
 //! Generic: the rules read mobilization, belligerency, area, energy and
 //! debt state, never identity; the data-swap tests run each rule with the
 //! roles exchanged.
@@ -7,10 +7,11 @@
 use std::path::PathBuf;
 
 use sim_core::country::Mobilization;
-use sim_core::economy::war_borrowing_rate;
+use sim_core::economy::{war_borrowing_rate, DEBT_DRAG_THRESHOLD};
+use sim_core::grudge::{FADE_PER_YEAR, TURNS_PER_YEAR};
 use sim_core::orders::Order;
 use sim_core::war::WarAim;
-use sim_core::{resolve_turn, CountryId, OrderSet, WorldState};
+use sim_core::{resolve_turn, CountryId, OrderSet, ProductionPolicy, WorldState};
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -20,6 +21,8 @@ fn world() -> WorldState {
     let def = scenario::load(workspace_root().join("data/fixtures/four_actor.ron")).unwrap();
     scenario::build(&def, Some(1)).unwrap()
 }
+
+const STEP: f64 = FADE_PER_YEAR / TURNS_PER_YEAR as f64;
 
 fn turn(w: &mut WorldState, orders: &[(CountryId, Order)]) {
     let sets = w
@@ -138,4 +141,50 @@ fn peace_stops_the_borrowing_and_a_war_fought_unmobilized_borrows_nothing() {
         assert!(close(w.country(riv).war_borrowing, 0.0));
     }
     assert!(close(war_borrowing_rate(Mobilization::Peacetime), 0.0));
+}
+
+/// `flooder` floods; `victim` is a net exporter in the same area with debt
+/// at `debt_ratio`. Returns victim->flooder memory after `turns`.
+fn flood(flooder: &str, victim: &str, debt_ratio: f64, same_area: bool, exporter: bool, turns: u32) -> (f64, f64) {
+    let mut w = world();
+    let (f, v) = (w.find(flooder).unwrap(), w.find(victim).unwrap());
+    let start = w.opinions.memory(v, f);
+    assert!(start < -20.0, "fixture pair holds a historical grudge");
+    let gdp_f = w.country(f).gdp;
+    let x = w.country_mut(f);
+    x.area = Some("gulf".into());
+    x.energy_capacity = 2.0 * gdp_f;
+    x.energy_policy = ProductionPolicy::Flood;
+    let x = w.country_mut(v);
+    let gdp_v = x.gdp;
+    x.area = Some(if same_area { "gulf" } else { "elsewhere" }.into());
+    x.energy_capacity = if exporter { 1.5 * gdp_v } else { 0.5 * gdp_v };
+    x.debt = debt_ratio * 4.0 * gdp_v;
+    for _ in 0..turns {
+        turn(&mut w, &[]);
+    }
+    (start, w.opinions.memory(v, f))
+}
+
+#[test]
+fn flooding_against_an_indebted_exporting_neighbour_renews_its_grudge() {
+    let turns = 12;
+    // Data swap: each pair in both roles.
+    for (flooder, victim) in [("RIV", "MAJ"), ("MAJ", "RIV")] {
+        let (start, after) = flood(flooder, victim, 1.0, true, true, turns);
+        assert!(close(after, start), "{victim} indebted: paused at {start}, got {after}");
+        // Controls: below the debt-drag threshold, in another area, or a
+        // net importer: the grudge fades as usual.
+        for (debt, same, exp, why) in [
+            (DEBT_DRAG_THRESHOLD * 0.5, true, true, "not indebted"),
+            (1.0, false, true, "not a neighbour"),
+            (1.0, true, false, "not an exporter"),
+        ] {
+            let (start, after) = flood(flooder, victim, debt, same, exp, turns);
+            assert!(
+                close(after, start + turns as f64 * STEP),
+                "{victim} {why}: expected fade from {start}, got {after}"
+            );
+        }
+    }
 }

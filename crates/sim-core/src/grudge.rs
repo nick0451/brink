@@ -30,14 +30,15 @@
 //!   threat = the largest hostile pressure in the builder's
 //!   `domestic::security_breakdown` (power x hostility x reach), the
 //!   sim-side analogue of the AI's threat estimate. Renewed every turn the
-//!   build-up lasts; read from canonical budget state (no AI reads it).
-//!
-//! KNOWN GAP: wars are now financed by debt (`economy::war_borrowing_rate`,
-//! D90), but they end by negotiation after ~2 years, so no exporter reaches
-//! the debt-drag level: the 1990 Iraq-Kuwait grievance (over-pumping against
-//! an indebted Iraq) still has no driver. The economic-warfare renewal is
-//! held until it can fire (D83, D90).
+//!   build-up lasts; read from canonical budget state (no AI reads it);
+//! - economic warfare: a producer on Flood renews the grudge of a
+//!   same-area net energy exporter whose debt is above the level where it
+//!   drags growth ([`crate::economy::DEBT_DRAG_THRESHOLD`]): Iraq's 1990
+//!   charge that Kuwait over-pumped while Iraq carried the debt of its war
+//!   (wars are borrowed for: `economy::war_borrowing_rate`, issue 21).
+//!   Renewed every turn both conditions hold.
 
+use crate::commodity::ProductionPolicy;
 use crate::diplomacy::{DiplomaticEvent, StreamKind};
 use crate::ids::CountryId;
 use crate::ledger::Visibility;
@@ -136,6 +137,23 @@ pub fn hostile_acts(state: &WorldState, events: &[DiplomaticEvent]) -> Vec<(Coun
             .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)));
         if let Some((x, _)) = top {
             acts.push((c.id, x, HostileAct::ArmsBuildUp));
+        }
+    }
+    // Standing condition: a producer flooding the market against an
+    // indebted exporting neighbour (economic warfare).
+    for f in state
+        .countries
+        .iter()
+        .filter(|c| c.active && c.area.is_some() && c.energy_policy == ProductionPolicy::Flood)
+    {
+        for v in state.countries.iter().filter(|v| {
+            v.id != f.id
+                && v.active
+                && v.area == f.area
+                && v.energy_net_exports > 0.0
+                && v.debt_ratio() > crate::economy::DEBT_DRAG_THRESHOLD
+        }) {
+            acts.push((f.id, v.id, HostileAct::OilFlood));
         }
     }
     acts.retain(|(a, b, _)| a != b);

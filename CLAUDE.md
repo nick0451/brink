@@ -101,7 +101,7 @@ When a decision changes DESIGN.md, also record it in the STATE.md decisions log 
   - In Git Bash, prefix `export PATH="$HOME/.cargo/bin:$PATH"` before cargo.
   - For complex edits, write a Python patch script to the scratchpad; long heredocs with mixed quotes can fail.
   - Re-read files after `cargo fmt` before patching.
-- **No commits** until the user says so (no git repo yet).
+- **Git:** the repo is https://github.com/nick0451/brink (public since 2026-10-07). Commit and push only when the user asks. `.gitignore` excludes `/target`, `client/.godot/`, `client/out/` (frame dumps) and patch leftovers.
 - **Godot** (front-end, D54):
   - Godot 4.7.2 is installed via winget but isn't on PATH in Git Bash. Use the console executable for CLI work: `C:\Users\nick\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.7.2-stable_win64_console.exe`.
   - The bridge crate is `crates/brink-godot` (gdext `godot` 0.5.5, feature `api-4-7`).

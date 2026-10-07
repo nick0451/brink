@@ -646,6 +646,55 @@ pub fn arm_client(view: &ObserverView, client: &ForeignView, contain: Option<sim
     s
 }
 
+/// Money per turn, as a share of our revenue, that one state pledges to
+/// finance another's war against our main threat (issue 23). Grounding: the
+/// Saudi and Kuwaiti loans and grants to Iraq, 1980-88, ran at roughly 2-3%
+/// of Saudi GDP a year (about 5% of revenue at a 45% take).
+pub const WAR_FINANCE_SHARE: f64 = 0.05;
+
+/// Value of financing `friend`'s war against `enemy`, our main threat
+/// (issue 23: balancing against a *regional* threat). The enemy of our
+/// enemy is worth paying in proportion to how much of the threat's strength
+/// the war ties down: that is containment we don't have to buy ourselves.
+/// The motive is our own threat estimate of the enemy (reach × power share
+/// against our defence × hostility, so a state strong enough to face the
+/// threat alone values it little), less the threat the friend itself poses
+/// to us. Money, not arms: it costs Budget, not our own army.
+pub fn fund_war(
+    view: &ObserverView,
+    war: &sim_core::War,
+    friend: &ForeignView,
+    enemy: &ForeignView,
+    amount: f64,
+) -> Score {
+    let mut s = Score::new();
+    let pers = view.own.personality;
+    let tied = war.belligerent(enemy.id).map_or(0.0, |b| b.allocation.clamp(0.0, 1.0));
+    s.add(
+        "the war ties down our main threat",
+        threat(view, enemy) * (0.5 + pers.paranoia) * tied,
+    );
+    s.add(
+        "they are a danger to us too",
+        -threat(view, friend) * (0.5 + pers.paranoia),
+    );
+    let revenue = (view.own.gdp * view.own.tax_rate).max(1e-9);
+    s.add("what it costs", -300.0 * amount / revenue * (0.5 + pers.greed));
+    s.add("what all our programmes cost together", -150.0 * support_burden(view));
+    s.add("added tension", -3.0 * (1.0 - pers.aggression));
+    s.add("status quo", -8.0);
+    reflexes::apply(
+        view,
+        DecisionKind::StreamStart,
+        Parties {
+            counterpart: Some(friend),
+            secondary: Some(enemy),
+        },
+        &mut s,
+    );
+    s
+}
+
 /// Market price of arms for `buyer`, as this observer sees it (D58).
 pub fn market_price(view: &ObserverView, buyer: sim_core::CountryId) -> f64 {
     let sanctioners = view.sanctions.iter().filter(|s| s.target == buyer).count();

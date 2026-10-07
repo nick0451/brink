@@ -39,6 +39,9 @@ pub enum HostileAct {
     NuclearStrike,
     /// One of us is arming beyond its habit against the other (arms race).
     ArmsBuildUp,
+    /// A neighbouring producer floods the market while we, an indebted
+    /// exporter, live on oil revenue (economic warfare).
+    OilFlood,
 }
 
 impl OpinionModifier {

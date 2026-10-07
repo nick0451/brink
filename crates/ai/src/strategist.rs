@@ -886,6 +886,46 @@ impl Strategist {
             }
         }
 
+        // Finance the war against our main threat (issue 23): when the
+        // state we are containing is fighting someone else, that war does
+        // our containment for us; a pledge of money each assessment while
+        // it lasts (it ends with the war, and every pledge is on the record).
+        if let (Some(x), false) = (contain, pressed) {
+            let revenue = view.own.gdp * view.own.tax_rate;
+            let amount = evaluate::WAR_FINANCE_SHARE * revenue;
+            let best = view
+                .wars
+                .iter()
+                .filter(|w| w.side_of(me).is_none())
+                .filter_map(|w| {
+                    let side = w.side_of(x)?;
+                    let friend = foreign(view, w.leader(side.other()))?;
+                    let enemy = foreign(view, x)?;
+                    let at_war_with_us = view.wars.iter().any(|v| {
+                        v.side_of(me).is_some() && v.side_of(friend.id).is_some_and(|s| Some(s) != v.side_of(me))
+                    });
+                    (!at_war_with_us).then(|| (friend, evaluate::fund_war(view, w, friend, enemy, amount)))
+                })
+                .max_by(|a, b| a.1.total().total_cmp(&b.1.total()).then(b.0.id.cmp(&a.0.id)));
+            if let Some((f, s)) = best {
+                let go = s.total() > 0.0 && budget.take(1);
+                if go {
+                    d.orders.push(Order::Aid {
+                        to: f.id,
+                        amount: amount * ASSESSMENT_INTERVAL as f64,
+                    });
+                }
+                d.records.push(record(
+                    format!("finance {}'s war against {}", f.code, code(view, x)),
+                    DecisionKind::StreamStart,
+                    Some(f.id),
+                    &s,
+                    go,
+                    precedents(view, f.id, 3),
+                ));
+            }
+        }
+
         // Arms we buy (D58): re-scored; two bad assessments and we cancel.
         let purchases: Vec<_> = view.streams.iter().filter(|s| s.to == me && s.sale).copied().collect();
         self.purchase_pressure
