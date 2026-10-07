@@ -695,6 +695,49 @@ pub fn fund_war(
     s
 }
 
+/// Forgive a war loan to a debtor in distress, or hold it (issue 24)?
+/// Positive = forgive. Against: the interest we would give up (the same
+/// money-vs-revenue coefficient as a pledge), and a dangerous debtor freed
+/// of the debt that keeps it weak. For: its gratitude (the opinion the
+/// write-off buys), and a solvent debtor still standing against our main
+/// threat. Holding is the status quo. Reads only the view: the loan is
+/// public, the rate is public, the debtor's distress was seen by the caller.
+pub fn forgive_debt(
+    view: &ObserverView,
+    debtor: &ForeignView,
+    loan: &sim_core::Loan,
+    contain: Option<sim_core::CountryId>,
+) -> Score {
+    let mut s = Score::new();
+    let pers = view.own.personality;
+    let revenue = (view.own.gdp * view.own.tax_rate).max(1e-9);
+    let interest = loan.amount * view.money.rate;
+    s.add("the interest we give up", -300.0 * interest / revenue * (0.5 + pers.greed));
+    let gratitude = (100.0 * loan.amount / debtor.gdp.max(1e-9)).min(sim_core::diplomacy::FORGIVENESS_OPINION_CAP);
+    s.add("their gratitude", 0.5 * gratitude);
+    if let Some(x) = contain.filter(|&x| x != debtor.id).and_then(|x| foreign(view, x)) {
+        s.add(
+            "they still stand against our main threat",
+            0.5 * threat(view, x) * pair_tension(view, debtor.id, x.id) / 100.0,
+        );
+    }
+    s.add(
+        "the debt keeps a danger to us weak",
+        -threat(view, debtor) * (0.5 + pers.paranoia),
+    );
+    s.add("status quo", MINOR_INERTIA);
+    reflexes::apply(
+        view,
+        DecisionKind::ForgiveDebt,
+        Parties {
+            counterpart: Some(debtor),
+            secondary: None,
+        },
+        &mut s,
+    );
+    s
+}
+
 /// Market price of arms for `buyer`, as this observer sees it (D58).
 pub fn market_price(view: &ObserverView, buyer: sim_core::CountryId) -> f64 {
     let sanctioners = view.sanctions.iter().filter(|s| s.target == buyer).count();

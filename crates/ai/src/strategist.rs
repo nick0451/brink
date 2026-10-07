@@ -926,6 +926,40 @@ impl Strategist {
             }
         }
 
+        // War loans we hold (issue 24): once the debtor is at peace and we
+        // see its debt dragging its growth, forgive the loan or hold it.
+        // Holding a debtor in distress is a public hostile act. Free.
+        let loans: Vec<_> = view.loans.iter().filter(|l| l.creditor == me).copied().collect();
+        for l in loans {
+            let Some(debtor) = foreign(view, l.debtor) else { continue };
+            let at_war = view.wars.iter().any(|w| w.side_of(debtor.id).is_some());
+            let distressed = debtor
+                .debt_ratio
+                .is_some_and(|e| e.value > sim_core::economy::DEBT_DRAG_THRESHOLD);
+            if at_war || !distressed {
+                continue;
+            }
+            let s = evaluate::forgive_debt(view, debtor, &l, contain);
+            let forgive = s.total() > 0.0;
+            d.orders.push(if forgive {
+                Order::ForgiveDebt { debtor: debtor.id }
+            } else {
+                Order::HoldDebt { debtor: debtor.id }
+            });
+            d.records.push(record(
+                if forgive {
+                    format!("forgive {}'s war debt", debtor.code)
+                } else {
+                    format!("hold {} to its war debt", debtor.code)
+                },
+                DecisionKind::ForgiveDebt,
+                Some(debtor.id),
+                &s,
+                forgive,
+                precedents(view, debtor.id, 3),
+            ));
+        }
+
         // Arms we buy (D58): re-scored; two bad assessments and we cancel.
         let purchases: Vec<_> = view.streams.iter().filter(|s| s.to == me && s.sale).copied().collect();
         self.purchase_pressure

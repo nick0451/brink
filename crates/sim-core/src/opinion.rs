@@ -24,6 +24,16 @@ pub struct Memory {
     pub renewed: Option<(u32, HostileAct)>,
     /// Renewals so far.
     pub renewals: u32,
+    /// The last harmful act that deepened it (D97), and the quarters a
+    /// harmful act has stood against us so far.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deepened: Option<HostileAct>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub deepened_turns: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// A hostile act between two countries that renews their historical grudge
@@ -42,6 +52,21 @@ pub enum HostileAct {
     /// A neighbouring producer floods the market while we, an indebted
     /// exporter, live on oil revenue (economic warfare).
     OilFlood,
+    /// A creditor held us, a debtor in distress, to our war loan (issue 24).
+    DebtHeld,
+}
+
+impl HostileAct {
+    /// Does the act harm its victim every turn it continues (D97)? Such a
+    /// standing campaign deepens the victim's grudge a step per turn. The
+    /// one-off acts carry their own opinion hit when they happen (sanction,
+    /// denunciation, war, exposures, arming an enemy), so they only renew:
+    /// deepening them too would count the same act twice. An arms build-up
+    /// is a response to a threat, mutual and renewed both ways, and harms
+    /// nobody directly: it only renews.
+    pub fn harms_each_turn(self) -> bool {
+        matches!(self, HostileAct::OilFlood | HostileAct::DebtHeld)
+    }
 }
 
 impl OpinionModifier {
@@ -64,13 +89,24 @@ impl std::fmt::Display for OpinionModifier {
             Some(Memory {
                 renewed: Some((t, act)),
                 renewals,
-            }) => write!(f, " (fading memory; renewed turn {t} by {act:?}, {renewals} renewals)"),
+                deepened,
+                deepened_turns,
+            }) => {
+                write!(f, " (fading memory; renewed turn {t} by {act:?}, {renewals} renewals")?;
+                if let Some(d) = deepened {
+                    write!(f, "; deepened by {d:?}, {deepened_turns} quarters")?;
+                }
+                write!(f, ")")
+            }
             Some(_) => write!(f, " (fading memory; never renewed)"),
             None if self.decay > 0.0 => write!(f, " (decays {:.2}/turn)", self.decay),
             None => Ok(()),
         }
     }
 }
+
+/// Source of a grudge a harmful campaign created where none existed (D97).
+pub const GRIEVANCE: &str = "grievance";
 
 /// Directed opinions: `opinion(from, to)` is how much `from` likes `to`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -137,6 +173,33 @@ impl OpinionBook {
                 }
                 mem.renewed = Some((turn, act));
             }
+        }
+    }
+
+    /// A harmful act by `actor` stood against `victim` this turn (D97):
+    /// deepen the victim's grudge by `step`, no lower than `cap` (summed
+    /// over its grudges), creating one ("grievance") where none exists.
+    /// The fade and floor rules of D81 then apply to the deepened value.
+    pub fn deepen(&mut self, victim: CountryId, actor: CountryId, act: HostileAct, step: f64, cap: f64) {
+        let room = (self.memory(victim, actor) - cap).max(0.0);
+        let delta = step.min(room);
+        let cell = self.modifiers_mut(victim, actor);
+        if let Some(m) = cell.iter_mut().find(|m| m.memory.is_some()) {
+            m.value -= delta;
+            let mem = m.memory.as_mut().expect("memory");
+            mem.deepened = Some(act);
+            mem.deepened_turns += 1;
+        } else if delta > 0.0 {
+            cell.push(OpinionModifier {
+                source: GRIEVANCE.into(),
+                value: -delta,
+                decay: 0.0,
+                memory: Some(Memory {
+                    deepened: Some(act),
+                    deepened_turns: 1,
+                    ..Memory::default()
+                }),
+            });
         }
     }
 

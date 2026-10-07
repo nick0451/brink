@@ -274,6 +274,8 @@ fn main() -> ExitCode {
                 println!("{}", headless::diagnose::commitments(&runs, &codes, &powers));
                 println!("{}", headless::diagnose::sanction_lifecycle(&runs, &codes));
                 println!("{}", headless::diagnose::grudges(&runs, &codes));
+                println!("{}", headless::diagnose::deepened_grudges(&runs, &codes));
+                println!("{}", headless::diagnose::creditors(&runs, &codes));
             }
             "wartrace" => {
                 // Turn-by-turn trace of every war (issue 22).

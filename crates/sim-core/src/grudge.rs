@@ -23,6 +23,10 @@
 //!   proliferator: a secret bomb is aimed at its historical enemies, and the
 //!   exposure is public, so each of them learns of it at once;
 //! - nuclear use;
+//! - holding a debtor in distress to a war loan (issue 24): from the
+//!   creditor's decision (`HoldDebt`) for as long as the held claim stands
+//!   and the debtor stays in distress (an outstanding claim nobody has
+//!   held renews nothing);
 //! - an arms race: a state spending more than [`BUILD_UP_MARGIN`] times
 //!   its habitual military share (the D59 `military_norm`, unscaled) and
 //!   not cutting renews its grudge with its top threat, both ways (the
@@ -31,12 +35,24 @@
 //!   `domestic::security_breakdown` (power x hostility x reach), the
 //!   sim-side analogue of the AI's threat estimate. Renewed every turn the
 //!   build-up lasts; read from canonical budget state (no AI reads it);
-//! - economic warfare: a producer on Flood renews the grudge of a
+//! - economic warfare: while the energy price is below its base (the
+//!   flood is doing harm: D97), a producer on Flood renews the grudge of a
 //!   same-area net energy exporter whose debt is above the level where it
 //!   drags growth ([`crate::economy::DEBT_DRAG_THRESHOLD`]): Iraq's 1990
 //!   charge that Kuwait over-pumped while Iraq carried the debt of its war
 //!   (wars are borrowed for: `economy::war_borrowing_rate`, issue 21).
+//!   A victim itself on Flood resents nobody for doing what it does.
 //!   Renewed every turn both conditions hold.
+//!
+//! Harmful campaigns deepen (D97): an act that harms its victim every turn
+//! it continues ([`HostileAct::harms_each_turn`]: oil flooding, a held war
+//! debt) also deepens the victim's grudge toward the actor by up to
+//! [`DEEPEN_PER_TURN`], down to [`DEEPEN_CAP`], creating a grudge where
+//! none existed. A flood deepens in proportion to the revenue the low
+//! price costs the victim (the economy's own `revenue_factor`), the full
+//! step at the largest loss the economy charges
+//! ([`crate::commodity::MAX_REVENUE_LOSS`]); a held debt, the full step. Once the campaign stops, the deepened grudge fades by the
+//! same rules as any other (paused two years, then 1.5/yr, bloc floor).
 
 use crate::commodity::ProductionPolicy;
 use crate::diplomacy::{DiplomaticEvent, StreamKind};
@@ -53,6 +69,18 @@ pub const FADE_PER_YEAR: f64 = 1.5;
 pub const RENEWAL_TURNS: u32 = 2 * TURNS_PER_YEAR;
 /// While the pair's blocs oppose, the grudge fades no further than this.
 pub const BLOC_FLOOR: f64 = -10.0;
+
+/// Opinion points a harmful campaign deepens its victim's grudge per turn
+/// (D97). From no grudge it reaches the cap in 14 quarters (3.5 years);
+/// from a -20 historical grudge in 10 (2.5 years): Iraq's grievance over
+/// Kuwaiti over-production and Gulf war debts ran from the 1988 ceasefire
+/// to the July 1990 ultimatum.
+pub const DEEPEN_PER_TURN: f64 = 5.0;
+/// The deepest a harmful campaign alone drives a grudge: met in kind by the
+/// other side (mean hostility 70), tension settles at 0.6 x 70 = 42, just
+/// over the casus belli line (40). One side's grievance alone (mean ~35-45)
+/// stays short of it: a campaign brings a pair to the brink, not beyond.
+pub const DEEPEN_CAP: f64 = -70.0;
 
 /// A build-up is spending over a fifth above habit: the Reagan build-up
 /// raised the US defence share of GDP about 25% over its late-1970s level.
@@ -140,15 +168,18 @@ pub fn hostile_acts(state: &WorldState, events: &[DiplomaticEvent]) -> Vec<(Coun
         }
     }
     // Standing condition: a producer flooding the market against an
-    // indebted exporting neighbour (economic warfare).
+    // indebted exporting neighbour (economic warfare), while the price is
+    // depressed (a flood into a high price harms nobody).
+    let depressed = state.energy.deviation() < 0.0;
     for f in state
         .countries
         .iter()
-        .filter(|c| c.active && c.area.is_some() && c.energy_policy == ProductionPolicy::Flood)
+        .filter(|c| depressed && c.active && c.area.is_some() && c.energy_policy == ProductionPolicy::Flood)
     {
         for v in state.countries.iter().filter(|v| {
             v.id != f.id
                 && v.active
+                && v.energy_policy != ProductionPolicy::Flood
                 && v.area == f.area
                 && v.energy_net_exports > 0.0
                 && v.debt_ratio() > crate::economy::DEBT_DRAG_THRESHOLD
@@ -156,8 +187,51 @@ pub fn hostile_acts(state: &WorldState, events: &[DiplomaticEvent]) -> Vec<(Coun
             acts.push((f.id, v.id, HostileAct::OilFlood));
         }
     }
+    // Standing condition: a creditor holding a debtor in distress to its
+    // war loan (set by `HoldDebt`; ends when forgiven or out of distress).
+    for l in state.diplomacy.loans.iter().filter(|l| l.held) {
+        if crate::diplomacy::in_distress(state, l.debtor) {
+            acts.push((l.creditor, l.debtor, HostileAct::DebtHeld));
+        }
+    }
     acts.retain(|(a, b, _)| a != b);
     acts
+}
+
+/// How hard a standing act hurts its victim this turn, 0..=1 of the full
+/// step (D97): a flood by the share of the victim's revenue the depressed
+/// price costs it, relative to the largest loss the economy charges; a
+/// held debt in distress, fully.
+pub fn harm(state: &WorldState, victim: CountryId, act: HostileAct) -> f64 {
+    match act {
+        HostileAct::OilFlood => {
+            let v = state.country(victim);
+            let loss = 1.0 - crate::commodity::revenue_factor(v.energy_net_exports, v.gdp, state.energy.deviation());
+            (loss / crate::commodity::MAX_REVENUE_LOSS).clamp(0.0, 1.0)
+        }
+        a if a.harms_each_turn() => 1.0,
+        _ => 0.0,
+    }
+}
+
+/// The harmful campaigns standing this turn, one per (actor, victim) pair
+/// at its largest harm (D97): the acts in `acts` that harm their victim
+/// every turn they last.
+pub fn harms(
+    state: &WorldState,
+    acts: &[(CountryId, CountryId, HostileAct)],
+) -> Vec<(CountryId, CountryId, HostileAct, f64)> {
+    let mut out: Vec<(CountryId, CountryId, HostileAct, f64)> = Vec::new();
+    for &(a, v, act) in acts.iter().filter(|x| x.2.harms_each_turn()) {
+        let h = harm(state, v, act);
+        match out.iter_mut().find(|x| x.0 == a && x.1 == v) {
+            Some(x) if h > x.3 => *x = (a, v, act, h),
+            Some(_) => {}
+            None if h > 0.0 => out.push((a, v, act, h)),
+            None => {}
+        }
+    }
+    out
 }
 
 /// Tension phase (DESIGN §4.3 step 9): renew the grudges this turn's hostile
@@ -165,7 +239,26 @@ pub fn hostile_acts(state: &WorldState, events: &[DiplomaticEvent]) -> Vec<(Coun
 /// every historical grudge that is neither paused nor at its floor.
 pub fn run(state: &mut WorldState, events: &[DiplomaticEvent]) {
     let turn = state.turn;
-    for (a, b, act) in hostile_acts(state, events) {
+    // A hold lapses once the debtor is out of distress: holding it again
+    // takes a new `HoldDebt` (D97 review).
+    let lapsed: Vec<bool> = state
+        .diplomacy
+        .loans
+        .iter()
+        .map(|l| !crate::diplomacy::in_distress(state, l.debtor))
+        .collect();
+    for (l, lapsed) in state.diplomacy.loans.iter_mut().zip(lapsed) {
+        l.held &= !lapsed;
+    }
+    let acts = hostile_acts(state, events);
+    // Deepen first, so a grudge the campaign creates is renewed (paused)
+    // with the rest below.
+    for (actor, victim, act, h) in harms(state, &acts) {
+        state
+            .opinions
+            .deepen(victim, actor, act, h * DEEPEN_PER_TURN, DEEPEN_CAP);
+    }
+    for (a, b, act) in acts {
         state.opinions.renew(a, b, turn, act);
         state.opinions.renew(b, a, turn, act);
     }

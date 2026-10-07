@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use sim_core::country::Mobilization;
 use sim_core::economy::{war_borrowing_rate, DEBT_DRAG_THRESHOLD};
-use sim_core::grudge::{FADE_PER_YEAR, TURNS_PER_YEAR};
+use sim_core::grudge::{DEEPEN_CAP, DEEPEN_PER_TURN, FADE_PER_YEAR, TURNS_PER_YEAR};
 use sim_core::orders::Order;
 use sim_core::war::WarAim;
 use sim_core::{resolve_turn, CountryId, OrderSet, ProductionPolicy, WorldState};
@@ -172,7 +172,14 @@ fn flooding_against_an_indebted_exporting_neighbour_renews_its_grudge() {
     // Data swap: each pair in both roles.
     for (flooder, victim) in [("RIV", "MAJ"), ("MAJ", "RIV")] {
         let (start, after) = flood(flooder, victim, 1.0, true, true, turns);
-        assert!(close(after, start), "{victim} indebted: paused at {start}, got {after}");
+        // D97: the flood harms the victim every turn it lasts, so it
+        // deepens the grudge (by up to a full step a turn, no deeper than
+        // the cap), not merely pauses its fade.
+        let deepest = (start - turns as f64 * DEEPEN_PER_TURN).max(DEEPEN_CAP);
+        assert!(
+            after < start - 1.0 && after >= deepest - 1e-9,
+            "{victim} indebted: deepened from {start} (no further than {deepest}), got {after}"
+        );
         // Controls: below the debt-drag threshold, in another area, or a
         // net importer: the grudge fades as usual.
         for (debt, same, exp, why) in [

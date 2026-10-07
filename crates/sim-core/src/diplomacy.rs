@@ -167,6 +167,25 @@ pub fn arms_value(kind: StreamKind, amount: f64) -> f64 {
     }
 }
 
+/// A war loan (issue 24, D95): one-off aid paid to a state at war is lent,
+/// not given. The money still goes into the recipient's spending pool; its
+/// debt rises by the amount and the funder holds this claim (public: the
+/// pledge was public). The debtor's interest on its share of the debt is
+/// paid to the creditor; the principal stands until the creditor forgives
+/// it ([`Order::ForgiveDebt`]).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Loan {
+    pub creditor: CountryId,
+    pub debtor: CountryId,
+    pub amount: f64,
+    /// Turn of the first loan in this claim.
+    pub since: u32,
+    /// The creditor has held the debtor to it (`HoldDebt`): while the
+    /// debtor is in distress, a harmful standing act (D97).
+    #[serde(default)]
+    pub held: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Diplomacy {
     pub treaties: Vec<Treaty>,
@@ -179,6 +198,9 @@ pub struct Diplomacy {
     /// during the economy phase.
     #[serde(default)]
     pub pending_arms: Vec<(CountryId, CountryId, f64)>,
+    /// War loans outstanding, one claim per (creditor, debtor) (issue 24).
+    #[serde(default)]
+    pub loans: Vec<Loan>,
     next_treaty: u32,
     next_proposal: u32,
 }
@@ -218,6 +240,20 @@ impl Diplomacy {
     pub fn is_sanctioned(&self, target: CountryId) -> bool {
         self.sanctions.iter().any(|s| s.target == target)
     }
+
+    /// Add `amount` to `creditor`'s claim on `debtor` (issue 24).
+    pub fn lend(&mut self, creditor: CountryId, debtor: CountryId, amount: f64, turn: u32) {
+        match self.loans.iter_mut().find(|l| l.creditor == creditor && l.debtor == debtor) {
+            Some(l) => l.amount += amount,
+            None => self.loans.push(Loan {
+                creditor,
+                debtor,
+                amount,
+                since: turn,
+                held: false,
+            }),
+        }
+    }
 }
 
 pub const SHALLOW_TRADE_MULTIPLIER: f64 = 1.6;
@@ -233,6 +269,17 @@ pub const SANCTION_OPINION: f64 = -25.0;
 /// The "past sanctions" memory left by a lift; fades by 1 per turn.
 pub const PAST_SANCTION_OPINION: f64 = -10.0;
 const DENOUNCE_TENSION: f64 = 5.0;
+/// Opinion a debtor gains toward a creditor that forgives its war loan:
+/// the aid formula (100 x amount / GDP), capped, fading over ~20 years.
+pub const FORGIVENESS_OPINION_CAP: f64 = 20.0;
+const FORGIVENESS_DECAY: f64 = 0.25;
+
+/// A debtor in distress (issue 24): at peace, with debt above the level
+/// where it drags growth.
+pub fn in_distress(state: &WorldState, debtor: CountryId) -> bool {
+    let d = state.country(debtor);
+    d.active && !state.wars.is_belligerent(debtor) && d.debt_ratio() > crate::economy::DEBT_DRAG_THRESHOLD
+}
 const MEDIATE_TENSION_RELIEF: f64 = 10.0;
 
 /// Initiative cost of an order. Standing settings are free.
@@ -256,6 +303,8 @@ pub fn initiative_cost(state: &WorldState, actor: CountryId, order: &Order) -> u
             u8::from(*accept && commitment)
         }
         Order::LiftSanction { .. }
+        | Order::ForgiveDebt { .. }
+        | Order::HoldDebt { .. }
         | Order::StopStream { .. }
         | Order::StopArmsStream { .. }
         | Order::CancelArmsPurchase { .. } => 0,
@@ -324,6 +373,19 @@ pub enum DiplomaticEvent {
     Denounced {
         by: CountryId,
         target: CountryId,
+    },
+    /// A creditor wrote off its war loan (issue 24).
+    DebtForgiven {
+        creditor: CountryId,
+        debtor: CountryId,
+        amount: f64,
+    },
+    /// A creditor held a debtor in distress to its war loan: a public
+    /// hostile act (issue 24).
+    DebtHeld {
+        creditor: CountryId,
+        debtor: CountryId,
+        amount: f64,
     },
     Mediated {
         by: CountryId,
@@ -681,6 +743,49 @@ pub fn apply(state: &mut WorldState, actor: CountryId, order: Order) -> Result<O
             state.opinions.add(target, actor, modifier("denounced us", -15.0, 1.0));
             state.tension.add(actor, target, DENOUNCE_TENSION);
             Ok(Some(DiplomaticEvent::Denounced { by: actor, target }))
+        }
+
+        Order::ForgiveDebt { debtor } => {
+            let pos = state
+                .diplomacy
+                .loans
+                .iter()
+                .position(|l| l.creditor == actor && l.debtor == debtor)
+                .ok_or("no such loan")?;
+            let loan = state.diplomacy.loans.remove(pos);
+            let d = state.country_mut(debtor);
+            d.debt = (d.debt - loan.amount).max(0.0);
+            let gain = (100.0 * loan.amount / d.gdp.max(1e-9)).min(FORGIVENESS_OPINION_CAP);
+            state
+                .opinions
+                .add(debtor, actor, modifier("forgave our war debts", gain, FORGIVENESS_DECAY));
+            Ok(Some(DiplomaticEvent::DebtForgiven {
+                creditor: actor,
+                debtor,
+                amount: loan.amount,
+            }))
+        }
+
+        Order::HoldDebt { debtor } => {
+            let pos = state
+                .diplomacy
+                .loans
+                .iter()
+                .position(|l| l.creditor == actor && l.debtor == debtor)
+                .ok_or("no such loan")?;
+            if !in_distress(state, debtor) {
+                return Err("debtor not in distress".into());
+            }
+            // The resentment is the deepening grudge while the hold stands
+            // (D97, `grudge::run`), not a one-off opinion hit.
+            let loan = &mut state.diplomacy.loans[pos];
+            loan.held = true;
+            let loan = *loan;
+            Ok(Some(DiplomaticEvent::DebtHeld {
+                creditor: actor,
+                debtor,
+                amount: loan.amount,
+            }))
         }
 
         Order::Mediate { a, b } => {

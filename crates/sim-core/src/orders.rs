@@ -88,6 +88,17 @@ pub enum Order {
     Denounce {
         target: CountryId,
     },
+    /// Write off our war loan to `debtor` (issue 24): its debt falls by
+    /// the claim, and we give up the claim and its interest. Free.
+    ForgiveDebt {
+        debtor: CountryId,
+    },
+    /// Keep our war loan to `debtor` on the books. Against a debtor at
+    /// peace whose debt drags its growth this is a public hostile act
+    /// (issue 24). Free.
+    HoldDebt {
+        debtor: CountryId,
+    },
     Mediate {
         a: CountryId,
         b: CountryId,

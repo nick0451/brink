@@ -180,6 +180,10 @@ pub struct RelationSample {
     /// Historical grudge (D81) still held, and its renewals so far.
     pub memory: Vec<f64>,
     pub renewals: Vec<u32>,
+    /// Quarters a harmful campaign deepened the grudge so far, and the last
+    /// act that did (D97).
+    pub deepened: Vec<u32>,
+    pub deepened_by: Vec<Option<sim_core::opinion::HostileAct>>,
 }
 
 fn relation_sample(state: &WorldState) -> RelationSample {
@@ -188,6 +192,8 @@ fn relation_sample(state: &WorldState) -> RelationSample {
     let mut opinion = Vec::with_capacity(ids.len() * ids.len());
     let mut memory = Vec::with_capacity(ids.len() * ids.len());
     let mut renewals = Vec::with_capacity(ids.len() * ids.len());
+    let mut deepened = Vec::with_capacity(ids.len() * ids.len());
+    let mut deepened_by = Vec::with_capacity(ids.len() * ids.len());
     for &a in &ids {
         for &b in &ids {
             tension.push(state.tension.get(a, b));
@@ -201,6 +207,9 @@ fn relation_sample(state: &WorldState) -> RelationSample {
                     .filter_map(|m| m.memory.map(|x| x.renewals))
                     .sum(),
             );
+            let mem = state.opinions.modifiers(a, b).iter().filter_map(|m| m.memory);
+            deepened.push(mem.clone().map(|x| x.deepened_turns).sum());
+            deepened_by.push(mem.filter_map(|x| x.deepened).next_back());
         }
     }
     RelationSample {
@@ -209,6 +218,8 @@ fn relation_sample(state: &WorldState) -> RelationSample {
         opinion,
         memory,
         renewals,
+        deepened,
+        deepened_by,
     }
 }
 

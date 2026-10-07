@@ -989,6 +989,8 @@ The descriptive personalities from the brief ("expansionist," "paranoid"...) are
 
 Memory is the shared **Event Ledger** (§21.1), read through each observer's own fog: broken treaties, attacks, aid, honoured or abandoned guarantees, threats followed through or dropped, coercion, exposed operations. There are no private per-AI memory stores. Trust, Credibility, Threat and IntentEst are all read from it. **AIs hold grudges against each other**, which creates historical rivalries without player involvement.
 
+*As built (D81, D97):* a scenario's starting hostility is a memory that fades 1.5/yr unless a hostile act renews it (2-year pause; floor −10 while blocs oppose). An act that harms its victim every turn it continues (flooding the oil market while the price is depressed against an indebted exporting neighbour, scaled by the revenue it costs; a war debt held against a debtor in distress) also **deepens** the victim's grudge up to 5 points a turn, to a cap of −70, creating one where none existed; once it stops, the same fade applies. One-off acts with their own opinion hit (sanction, denunciation, war, exposures) only renew. `brink observe` shows "deepened by OilFlood, N quarters".
+
 ### 14.7 Why AIs fight each other
 
 AI–AI conflict emerges from geography (neighbours have higher threat and opportunity scores), resource needs (an energy-poor AI targets energy-rich regions), balance-of-power logic, memory, and ideology. The player is one of 16 actors. The player is targeted only when the player is in fact the biggest threat or the best opportunity.

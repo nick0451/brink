@@ -81,6 +81,8 @@ pub enum DecisionKind {
     MonetaryStance,
     /// Keeping (or lifting) a sanction we impose (issue 15).
     KeepSanction,
+    /// Forgiving (or holding) a war loan to a debtor in distress (issue 24).
+    ForgiveDebt,
 }
 
 impl DecisionKind {

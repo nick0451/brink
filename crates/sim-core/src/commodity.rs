@@ -34,8 +34,10 @@ pub const WAR_OUTPUT: f64 = 0.7;
 const ENERGY_GROWTH: f64 = 0.01;
 pub const MAX_ENERGY_GROWTH: f64 = 0.01;
 /// Revenue multiplier per unit of (net exports ÷ GDP) × relative price
-/// deviation, capped to [−30%, +60%].
+/// deviation, capped to [−[`MAX_REVENUE_LOSS`], +60%].
 const ENERGY_REVENUE: f64 = 0.3;
+/// The most a low price can cut an exporter's spending pool.
+pub const MAX_REVENUE_LOSS: f64 = 0.3;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProductionPolicy {
@@ -130,5 +132,5 @@ pub fn growth_effect(net_exports: f64, gdp: f64, deviation: f64) -> f64 {
 
 /// Spending-pool multiplier from the price (1 = neutral).
 pub fn revenue_factor(net_exports: f64, gdp: f64, deviation: f64) -> f64 {
-    1.0 + (ENERGY_REVENUE * net_exports / gdp.max(1e-9) * deviation).clamp(-0.3, 0.6)
+    1.0 + (ENERGY_REVENUE * net_exports / gdp.max(1e-9) * deviation).clamp(-MAX_REVENUE_LOSS, 0.6)
 }

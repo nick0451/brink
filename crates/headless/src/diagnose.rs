@@ -1463,6 +1463,161 @@ fn post_war_debt(runs: &[RunResult], codes: &[String]) -> String {
     out
 }
 
+/// Grudges deepened by a harmful campaign (D97), every directed pair
+/// (victim -> actor) deepened in any run: runs, mean quarters of harm by the
+/// end, the deepest memory sampled (mean over those runs, and the worst),
+/// runs that went past -40, and the acts that last deepened it.
+pub fn deepened_grudges(runs: &[RunResult], codes: &[String]) -> String {
+    let nc = codes.len();
+    let mut out = format!(
+        "DEEPENED GRUDGES (D97; victim->actor; {} runs; deepest = min sampled memory)\n",
+        runs.len()
+    );
+    let _ = writeln!(
+        out,
+        "  {:9} {:>5} {:>9} {:>13} {:>7} {:>6}  acts",
+        "pair", "runs", "quarters", "deepest mean", "worst", "<-40"
+    );
+    let mut rows = Vec::new();
+    for i in 0..nc * nc {
+        let mut acts: BTreeMap<String, u32> = BTreeMap::new();
+        let (mut n, mut q, mut deep, mut worst, mut past) = (0u32, 0u32, 0.0, 0.0f64, 0u32);
+        for r in runs {
+            let Some(last) = r.relations.last() else { continue };
+            if last.deepened[i] == 0 {
+                continue;
+            }
+            n += 1;
+            q += last.deepened[i];
+            let min = r.relations.iter().map(|s| s.memory[i]).fold(0.0, f64::min);
+            deep += min;
+            worst = worst.min(min);
+            past += (min < -40.0) as u32;
+            if let Some(a) = last.deepened_by[i] {
+                *acts.entry(format!("{a:?}")).or_default() += 1;
+            }
+        }
+        if n > 0 {
+            rows.push((n, i, q, deep, worst, past, acts));
+        }
+    }
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    for (n, i, q, deep, worst, past, acts) in rows {
+        let pair = format!("{}-{}", codes[i / nc], codes[i % nc]);
+        let acts: Vec<String> = acts.iter().map(|(k, v)| format!("{k} {v}")).collect();
+        let _ = writeln!(
+            out,
+            "  {pair:9} {n:>5} {:>9.1} {:>13.1} {worst:>7.0} {past:>6}  {}",
+            q as f64 / n as f64,
+            deep / n as f64,
+            acts.join(", ")
+        );
+    }
+    out
+}
+
+/// War loans and their settlement (issue 24): claims per (creditor,
+/// debtor) pair, the forgive-or-hold decisions and their terms, and the
+/// holds (public hostile acts that renew a grudge where one exists).
+pub fn creditors(runs: &[RunResult], codes: &[String]) -> String {
+    use sim_core::DiplomaticEvent as E;
+    #[derive(Default)]
+    struct Pair {
+        runs: u32,
+        lent: f64,
+        outstanding: f64,
+        forgiven: (u32, f64),
+        held: u32,
+        first_hold: Vec<f64>,
+    }
+    let mut pairs: BTreeMap<(String, String), Pair> = BTreeMap::new();
+    let mut terms: BTreeMap<(String, bool), (u32, BTreeMap<String, f64>)> = BTreeMap::new();
+    for r in runs {
+        let mut lent: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+        let mut first: BTreeMap<(usize, usize), u32> = BTreeMap::new();
+        let state: serde_json::Value = serde_json::from_str(&r.final_state).unwrap_or_default();
+        for l in state["diplomacy"]["loans"].as_array().into_iter().flatten() {
+            let c = l["creditor"].as_u64().unwrap_or(0) as usize;
+            let d = l["debtor"].as_u64().unwrap_or(0) as usize;
+            let a = l["amount"].as_f64().unwrap_or(0.0);
+            *lent.entry((c, d)).or_default() += a;
+            pairs.entry((codes[c].clone(), codes[d].clone())).or_default().outstanding += a;
+        }
+        for (t, e) in &r.events {
+            match *e {
+                E::DebtForgiven { creditor, debtor, amount } => {
+                    *lent.entry((creditor.index(), debtor.index())).or_default() += amount;
+                    let p = pairs
+                        .entry((codes[creditor.index()].clone(), codes[debtor.index()].clone()))
+                        .or_default();
+                    p.forgiven.0 += 1;
+                    p.forgiven.1 += amount;
+                }
+                E::DebtHeld { creditor, debtor, .. } => {
+                    pairs
+                        .entry((codes[creditor.index()].clone(), codes[debtor.index()].clone()))
+                        .or_default()
+                        .held += 1;
+                    first.entry((creditor.index(), debtor.index())).or_insert(*t);
+                }
+                _ => {}
+            }
+        }
+        for ((c, d), a) in lent {
+            let p = pairs.entry((codes[c].clone(), codes[d].clone())).or_default();
+            p.runs += 1;
+            p.lent += a;
+        }
+        for ((c, d), t) in first {
+            pairs
+                .entry((codes[c].clone(), codes[d].clone()))
+                .or_default()
+                .first_hold
+                .push(t as f64);
+        }
+        for e in &r.reasoning {
+            if e.decision.kind != sim_core::DecisionKind::ForgiveDebt {
+                continue;
+            }
+            let who = format!(
+                "{} -> {}",
+                e.country,
+                e.decision.counterpart.map_or("?".to_string(), |c| codes[c.index()].clone())
+            );
+            let x = terms.entry((who, e.decision.chosen)).or_default();
+            x.0 += 1;
+            for l in &e.decision.lines {
+                *x.1.entry(l.label.clone()).or_default() += l.value;
+            }
+        }
+    }
+    let mut out = format!("CREDITORS (issue 24; war loans over {} runs)\n", runs.len());
+    for ((c, d), p) in &pairs {
+        let _ = writeln!(
+            out,
+            "  {c} -> {d}: lent in {} runs, mean {:.2} per run with a loan; forgiven {} times ({:.2}); held {} assessments; outstanding at end {:.2} total; first hold turn median {:.0}",
+            p.runs,
+            p.lent / p.runs.max(1) as f64,
+            p.forgiven.0,
+            p.forgiven.1,
+            p.held,
+            p.outstanding,
+            median(p.first_hold.clone())
+        );
+    }
+    for ((who, forgive), (n, t)) in &terms {
+        let mut v: Vec<_> = t.iter().map(|(k, x)| (k.clone(), x / *n as f64)).collect();
+        v.sort_by(|a, b| b.1.abs().total_cmp(&a.1.abs()));
+        let _ = writeln!(
+            out,
+            "  {who} {} x{n}: {}",
+            if *forgive { "FORGIVE" } else { "HOLD" },
+            v.iter().map(|(k, x)| format!("{k} {x:+.1}")).collect::<Vec<_>>().join("; ")
+        );
+    }
+    out
+}
+
 /// Turn-by-turn trace of every war in the given runs (issue 22): front,
 /// both leaders' weariness, stability, debt and readiness, and their
 /// `continue_war` score with its terms.

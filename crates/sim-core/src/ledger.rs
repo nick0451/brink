@@ -486,6 +486,8 @@ fn reaction(event: &DiplomaticEvent) -> Option<(CountryId, CountryId, f64)> {
     match *event {
         SanctionImposed { by, target } => Some((by, target, -10.0)),
         Denounced { by, target } => Some((by, target, -5.0)),
+        DebtForgiven { creditor, debtor, .. } => Some((creditor, debtor, 5.0)),
+        DebtHeld { creditor, debtor, .. } => Some((creditor, debtor, -5.0)),
         AidPledged { from, to, .. } | ArmsTransferred { from, to, .. } => Some((from, to, 5.0)),
         StreamStarted { stream } if !stream.covert => Some((stream.from, stream.to, 8.0)),
         StreamStopped { stream } if !stream.covert => Some((stream.from, stream.to, -5.0)),

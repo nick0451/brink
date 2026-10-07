@@ -41,6 +41,7 @@ pub use country::{
     ReputationPriors, Tier,
 };
 pub use diplomacy::{
+    Loan,
     DiplomaticEvent, Proposal, ProposalId, Sanction, Stream, StreamKind, Treaty, TreatyId, TreatyKind,
 };
 pub use ids::CountryId;

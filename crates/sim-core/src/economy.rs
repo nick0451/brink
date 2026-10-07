@@ -122,8 +122,23 @@ pub fn run(state: &mut WorldState) {
         c.aid_out = 0.0;
     }
 
+    // War loans (issue 24): each creditor receives the interest on its
+    // share of the debtor's debt (part of the debt service the debtor
+    // already pays). The principal is never repaid; it stands until it is
+    // forgiven.
+    for l in &state.diplomacy.loans {
+        let d = state.country(l.debtor);
+        if d.debt > 0.0 && d.active {
+            pools[l.creditor.index()] += d.debt_service * (l.amount / d.debt).min(1.0);
+        }
+    }
+
     // Aid: one-off pledges first, then standing streams, in a fixed order.
+    // One-off aid paid to a state at war is a war loan (issue 24, D95): it
+    // buys the same army, but the recipient's debt rises by it and the
+    // funder holds the claim. Standing streams and peacetime aid are gifts.
     let mut transfers: Vec<(CountryId, CountryId, f64)> = std::mem::take(&mut state.diplomacy.pending_aid);
+    let one_off = transfers.len();
     transfers.extend(
         state
             .diplomacy
@@ -133,11 +148,16 @@ pub fn run(state: &mut WorldState) {
             .map(|s| (s.from, s.to, s.amount)),
     );
     let mut paid_cap: Vec<f64> = pools.iter().map(|p| p * MAX_AID_SHARE).collect();
-    for (from, to, amount) in transfers {
+    let turn = state.turn;
+    for (k, (from, to, amount)) in transfers.into_iter().enumerate() {
         let pay = amount.min(paid_cap[from.index()]).max(0.0);
         paid_cap[from.index()] -= pay;
         pools[from.index()] -= pay;
         pools[to.index()] += pay;
+        if k < one_off && belligerent[to.index()] && pay > 0.0 {
+            state.country_mut(to).debt += pay;
+            state.diplomacy.lend(from, to, pay, turn);
+        }
         state.countries[from.index()].aid_out += pay;
         state.countries[to.index()].aid_in += pay;
     }

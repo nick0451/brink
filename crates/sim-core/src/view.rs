@@ -140,6 +140,8 @@ pub struct ObserverView {
     pub treaties: Vec<Treaty>,
     pub sanctions: Vec<Sanction>,
     pub streams: Vec<Stream>,
+    /// War loans outstanding (public: the pledges were public; issue 24).
+    pub loans: Vec<crate::diplomacy::Loan>,
     /// Proposals addressed to the observer that it may answer this turn.
     pub incoming_proposals: Vec<Proposal>,
     pub global_tension: f64,
@@ -186,6 +188,7 @@ pub fn observe(state: &WorldState, observer: CountryId) -> ObserverView {
             })
             .copied()
             .collect(),
+        loans: d.loans.clone(),
         incoming_proposals: d
             .proposals
             .iter()
