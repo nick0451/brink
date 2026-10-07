@@ -1,0 +1,9 @@
+[package]
+name = "ai"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+sim-core.workspace = true
+serde.workspace = true

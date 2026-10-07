@@ -1,0 +1,136 @@
+// Reflex library, 1980–2000 scenario (design/behaviour-and-voice.md §1.3).
+// Institutional habits as data: WHEN <conditions> THEN <labelled utility>
+// on <decision>, gated by state (never by date). Only reflexes the current
+// AI decisions can fire are authored here; test and flood reflexes are
+// added when v0.2 provides their inputs.
+// Set ids are scenario data; engine code never sees them.
+[
+    (id: "USA", reflexes: [
+        (id: "lead_dont_follow", decision: JoinSanction, weight: -10,
+         label: "lead, don't follow"),
+        (id: "containment", decision: AcceptProposal(Guarantee), when: [SecondaryRivalBloc], weight: 20,
+         label: "containment", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.6)]),
+        (id: "bring_me_a_coalition", decision: JoinSanction, when: [CounterpartIsMyAlly], weight: 15,
+         label: "coalition leadership"),
+    ]),
+    (id: "SOV", reflexes: [
+        (id: "socialist_solidarity", decision: StayInAlliance, when: [CounterpartSharesAlignment], weight: 15,
+         label: "socialist solidarity", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.7)]),
+        (id: "imperialist_instrument", decision: JoinSanction, weight: -15,
+         label: "sanctions are an instrument of imperialism"),
+    ]),
+    (id: "CHN", reflexes: [
+        (id: "independent_foreign_policy", decision: AcceptProposal(DefensiveAlliance), weight: -25,
+         label: "independent foreign policy of peace", active_if: [PersonalityBelow(Ideology, 0.6)]),
+        (id: "non_interference", decision: JoinSanction, weight: -15,
+         label: "non-interference in internal affairs"),
+    ]),
+    (id: "JPN", reflexes: [
+        (id: "constitutional_considerations", decision: AcceptProposal(DefensiveAlliance), when: [CounterpartIsGreatPower], weight: -30,
+         label: "constitutional considerations", active_if: [PersonalityBelow(Aggression, 0.3)]),
+        (id: "provisional_solidarity", decision: JoinSanction, when: [CounterpartIsMyAlly], weight: 15,
+         label: "solidarity with our ally (provisional)"),
+        (id: "the_umbrella", decision: StayInAlliance, when: [CounterpartIsGreatPower], weight: 20,
+         label: "the umbrella"),
+        // Real policy: the Three Principles on Arms Exports (1967, tightened 1976).
+        (id: "three_principles", decision: StreamStart, weight: -40,
+         label: "the three principles on arms exports", active_if: [PersonalityBelow(Aggression, 0.3)]),
+    ]),
+    (id: "FRG", reflexes: [
+        (id: "change_through_trade", decision: JoinSanction, when: [SecondaryRivalBloc], weight: -20,
+         label: "change through trade"),
+        (id: "keep_the_americans_in", decision: StayInAlliance, when: [MyThreatAtLeast(20)], weight: 20,
+         label: "keep the Americans in"),
+        (id: "ostpolitik", decision: AcceptProposal(NonAggression), when: [CounterpartRivalBloc], weight: 15,
+         label: "Ostpolitik", active_if: [PersonalityBelow(Aggression, 0.3)]),
+        // Real policy: restrictive export guidelines, no weapons into areas of tension.
+        (id: "no_arms_into_tension", decision: StreamStart, weight: -20,
+         label: "no weapons into areas of tension", active_if: [PersonalityBelow(Aggression, 0.3)]),
+    ]),
+    (id: "POL", reflexes: [
+        (id: "the_door_opens", decision: StayInAlliance, when: [CounterpartCredibilityThreatBelow(40)], weight: -25,
+         label: "the door opens"),
+        (id: "the_lesser_evil", decision: StayInAlliance, when: [CounterpartCredibilityThreatAtLeast(60)], weight: 25,
+         label: "the lesser evil", active_if: [Government(Authoritarian)]),
+        (id: "never_again_between", decision: AcceptProposal(DefensiveAlliance), when: [MyThreatAtLeast(30)], weight: 30,
+         label: "never again between", active_if: [Government(Democracy)]),
+    ]),
+    (id: "YUG", reflexes: [
+        (id: "equidistance_alliance", decision: AcceptProposal(DefensiveAlliance), when: [CounterpartIsGreatPower], weight: -30,
+         label: "non-alignment is non-negotiable", ideological: true),
+        (id: "equidistance_basing", decision: AcceptProposal(Basing), weight: -30,
+         label: "no foreign troops on non-aligned soil", ideological: true),
+        (id: "federal_veto_alliance", decision: AcceptProposal(DefensiveAlliance), weight: -10,
+         label: "consensus of the rotating Presidency"),
+        (id: "federal_veto_guarantee", decision: AcceptProposal(Guarantee), weight: -10,
+         label: "consensus of the rotating Presidency"),
+    ]),
+    (id: "IRN", reflexes: [
+        (id: "neither_east_nor_west_basing", decision: AcceptProposal(Basing), when: [CounterpartIsGreatPower], weight: -30,
+         label: "neither East nor West", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.7)]),
+        (id: "neither_east_nor_west_guarantee", decision: RequestGuarantee, when: [CounterpartIsGreatPower], weight: -30,
+         label: "neither East nor West", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.7)]),
+        (id: "arrogant_powers", decision: JoinSanction, when: [CounterpartIsGreatPower], weight: -25,
+         label: "we do not serve the arrogant powers"),
+    ]),
+    (id: "IRQ", reflexes: [
+        (id: "the_invoice", decision: RequestGuarantee, weight: -20,
+         label: "Iraq requests nothing, but attaches an invoice"),
+        (id: "historic_moment_unbound", decision: AcceptProposal(NonAggression), weight: -15,
+         label: "the historic moment is not to be bound", active_if: [PersonalityAtLeast(Opportunism, 0.7)]),
+    ]),
+    (id: "SAU", reflexes: [
+        (id: "temporary_friends", decision: RequestGuarantee, when: [MyThreatAtLeast(50)], weight: 40,
+         label: "the Kingdom welcomes friends, temporarily"),
+        (id: "honoured_guests", decision: AcceptProposal(Basing), when: [MyThreatAtLeast(50)], weight: 30,
+         label: "honoured guests"),
+        (id: "visa_under_review", decision: AcceptProposal(Basing), when: [MyThreatBelow(30)], weight: -20,
+         label: "the guests' visa is under review"),
+    ]),
+    (id: "ISR", reflexes: [
+        (id: "defend_ourselves", decision: RequestGuarantee, weight: -30,
+         label: "we defend ourselves by ourselves"),
+        (id: "freedom_of_action", decision: AcceptProposal(DefensiveAlliance), weight: -15,
+         label: "freedom of action"),
+    ]),
+    (id: "IND", reflexes: [
+        (id: "non_alignment", decision: AcceptProposal(DefensiveAlliance), when: [CounterpartIsGreatPower, MyThreatBelow(70)], weight: -30,
+         label: "non-alignment is not neutrality", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.4)]),
+        (id: "non_alignment_under_threat", decision: AcceptProposal(DefensiveAlliance), when: [CounterpartIsGreatPower, MyThreatAtLeast(70)], weight: -15,
+         label: "non-alignment, reconsidered", ideological: true, active_if: [PersonalityAtLeast(Ideology, 0.4)]),
+        (id: "no_foreign_bases", decision: AcceptProposal(Basing), weight: -30,
+         label: "no extra-regional bases", ideological: true),
+        (id: "deplores_sanctions", decision: JoinSanction, weight: -10,
+         label: "India deplores sanctions"),
+    ]),
+    (id: "PAK", reflexes: [
+        (id: "frontline_state", decision: RequestGuarantee, when: [MyThreatAtLeast(30)], weight: 15,
+         label: "frontline state"),
+        (id: "betrayal_again", decision: StayInAlliance, when: [CounterpartCutMySupportWithin(8)], weight: -30,
+         label: "betrayal, again"),
+        (id: "listening_posts_paid", decision: AcceptProposal(Basing), when: [CounterpartFundsMe], weight: 20,
+         label: "listening posts, paid in advance"),
+    ]),
+    (id: "PRK", reflexes: [
+        (id: "sovereignty_is_our_life", decision: AcceptProposal(Basing), weight: -40,
+         label: "sovereignty is our life"),
+        (id: "declaration_of_war", decision: JoinSanction, weight: -30,
+         label: "sanctions are a declaration of war, including ours"),
+        (id: "fraternal_balance", decision: StayInAlliance, when: [CounterpartFundsMe], weight: 25,
+         label: "equidistant fraternal balance"),
+    ]),
+    (id: "ZAF", reflexes: [
+        (id: "nobody_is_coming", decision: RequestGuarantee, weight: -15,
+         label: "nobody is coming"),
+        (id: "good_neighbourliness", decision: AcceptProposal(NonAggression), weight: 15,
+         label: "good-neighbourliness, as defined by the Accord"),
+    ]),
+    (id: "CUB", reflexes: [
+        (id: "blockade", decision: JoinSanction, when: [CounterpartIsGreatPower, CounterpartRivalBloc], weight: -40,
+         label: "the blockade"),
+        (id: "special_period_trade", decision: AcceptProposal(Trade), weight: 15,
+         label: "the Special Period", active_if: [NotReceivingSupport]),
+        (id: "internationalist_loyalty", decision: StayInAlliance, when: [CounterpartFundsMe], weight: 20,
+         label: "internationalist loyalty"),
+    ]),
+]

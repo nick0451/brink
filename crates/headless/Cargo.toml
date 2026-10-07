@@ -1,0 +1,18 @@
+[package]
+name = "headless"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "brink"
+path = "src/main.rs"
+
+[dependencies]
+sim-core.workspace = true
+scenario.workspace = true
+ai.workspace = true
+voice.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rayon.workspace = true

@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/sim-core", "crates/scenario", "crates/ai", "crates/voice", "crates/headless", "crates/brink-godot"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ron = "0.8"
+rand_core = "0.6"
+rand_chacha = { version = "0.3", features = ["serde1"] }
+rayon = "1"
+sim-core = { path = "crates/sim-core" }
+scenario = { path = "crates/scenario" }
+ai = { path = "crates/ai" }
+voice = { path = "crates/voice" }

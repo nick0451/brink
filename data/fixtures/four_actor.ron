@@ -1,0 +1,49 @@
+// Four-actor fixture (implementation plan §5). Ids are deliberately neutral so
+// tests never depend on real-country identity.
+Scenario(
+    name: "four_actor",
+    seed: 1980,
+    start_year: 1980,
+    turns: 80,
+    base_interest_rate: 0.012,
+    countries: [
+        (
+            id: "MAJ", name: "Major Power", government: Democracy,
+            population: 230.0, gdp: 100.0, tax_rate: 0.20, debt: 120.0, financial_weight: 0.55,
+            budget: (military: 0.30, development: 0.20, welfare: 0.40, intelligence: 0.10),
+            deficit_ratio: 0.05, military: 60.0, stability: 58.0, legitimacy: 60.0, intel_tech: 8, alignment: Some("west"),
+        ),
+        (
+            id: "ALY", name: "Ally", government: Democracy,
+            population: 60.0, gdp: 30.0, tax_rate: 0.30, debt: 40.0,
+            budget: (military: 0.15, development: 0.30, welfare: 0.48, intelligence: 0.07),
+            military: 25.0, stability: 65.0, legitimacy: 65.0, intel_tech: 6, alignment: Some("west"),
+        ),
+        (
+            id: "RIV", name: "Rival", government: Authoritarian,
+            population: 265.0, gdp: 45.0, tax_rate: 0.40, debt: 30.0,
+            budget: (military: 0.45, development: 0.20, welfare: 0.25, intelligence: 0.10),
+            deficit_ratio: 0.03, military: 90.0, stability: 55.0, legitimacy: 55.0, intel_tech: 7, alignment: Some("east"),
+        ),
+        (
+            id: "NEU", name: "Neutral", government: Authoritarian,
+            population: 40.0, gdp: 4.0, tax_rate: 0.25, debt: 6.0,
+            budget: (military: 0.25, development: 0.25, welfare: 0.40, intelligence: 0.10),
+            military: 8.0, stability: 50.0, legitimacy: 50.0, intel_tech: 3,
+        ),
+    ],
+    opinions: [
+        (from: "MAJ", to: "ALY", value: 40.0),
+        (from: "ALY", to: "MAJ", value: 45.0),
+        (from: "MAJ", to: "RIV", value: -40.0),
+        (from: "RIV", to: "MAJ", value: -45.0),
+        (from: "ALY", to: "RIV", value: -30.0),
+        (from: "RIV", to: "ALY", value: -25.0),
+        (from: "NEU", to: "RIV", value: 10.0, decay: 0.5, source: "recent arms deal"),
+    ],
+    treaties: [
+        (kind: DefensiveAlliance, a: "MAJ", b: "ALY"),
+        (kind: Trade(deep: false), a: "MAJ", b: "ALY"),
+        (kind: Trade(deep: false), a: "RIV", b: "NEU"),
+    ],
+)

@@ -1,0 +1,79 @@
+// Gate 5 fixture (DESIGN §22.1): a hegemon, its ally, a peer rival, a
+// regional revisionist, a client and a trading neutral. Tests "delete" the
+// rival by ordinary state edits (collapse of its forces and economy) to ask
+// whether the world stays interesting with no separate ruleset.
+// Ids are neutral so nothing depends on real-country identity.
+Scenario(
+    name: "post_rival",
+    seed: 1991,
+    start_year: 1990,
+    turns: 40,
+    base_interest_rate: 0.012,
+    personality_jitter: 0.1,
+    countries: [
+        (
+            id: "HEG", name: "Hegemon", government: Democracy,
+            population: 250.0, gdp: 100.0, tax_rate: 0.20, debt: 150.0, financial_weight: 0.55,
+            budget: (military: 0.28, development: 0.22, welfare: 0.40, intelligence: 0.10),
+            deficit_ratio: 0.04, military: 60.0, stability: 60.0, legitimacy: 60.0, intel_tech: 8, military_tech: 7,
+            force_mix: (land: 0.4, naval: 0.3, air: 0.3), alignment: Some("west"),
+        ),
+        (
+            id: "ALY", name: "Ally", government: Democracy,
+            population: 80.0, gdp: 35.0, tax_rate: 0.30, debt: 40.0,
+            budget: (military: 0.12, development: 0.30, welfare: 0.50, intelligence: 0.08),
+            military: 18.0, stability: 65.0, legitimacy: 65.0, intel_tech: 6, military_tech: 6, alignment: Some("west"),
+        ),
+        (
+            id: "RIV", name: "Rival", government: Authoritarian,
+            population: 290.0, gdp: 40.0, tax_rate: 0.40, debt: 30.0,
+            budget: (military: 0.45, development: 0.20, welfare: 0.25, intelligence: 0.10),
+            military: 85.0, stability: 50.0, legitimacy: 50.0, intel_tech: 7, military_tech: 6, alignment: Some("east"),
+        ),
+        (
+            id: "REG", name: "Regional Power", government: Authoritarian,
+            population: 60.0, gdp: 12.0, tax_rate: 0.30, debt: 10.0,
+            budget: (military: 0.35, development: 0.25, welfare: 0.30, intelligence: 0.10),
+            military: 22.0, stability: 55.0, legitimacy: 55.0, intel_tech: 4, military_tech: 4,
+            personality: (aggression: 0.8, risk: 0.6, paranoia: 0.6, loyalty: 0.4, greed: 0.4, ideology: 0.5, opportunism: 0.8),
+        ),
+        (
+            id: "CLI", name: "Client", government: Authoritarian,
+            population: 30.0, gdp: 8.0, tax_rate: 0.25, debt: 8.0,
+            budget: (military: 0.25, development: 0.30, welfare: 0.35, intelligence: 0.10),
+            military: 10.0, stability: 50.0, legitimacy: 50.0, intel_tech: 3, military_tech: 4,
+        ),
+        (
+            id: "TRD", name: "Trading State", government: Democracy,
+            population: 40.0, gdp: 20.0, tax_rate: 0.25, debt: 15.0,
+            budget: (military: 0.08, development: 0.40, welfare: 0.45, intelligence: 0.07),
+            military: 6.0, stability: 65.0, legitimacy: 65.0, intel_tech: 5, military_tech: 5,
+            personality: (aggression: 0.3, risk: 0.4, paranoia: 0.4, loyalty: 0.5, greed: 0.8, ideology: 0.3, opportunism: 0.5),
+        ),
+    ],
+    opinions: [
+        (from: "HEG", to: "ALY", value: 40.0), (from: "ALY", to: "HEG", value: 40.0),
+        (from: "HEG", to: "RIV", value: -40.0), (from: "RIV", to: "HEG", value: -45.0),
+        (from: "ALY", to: "RIV", value: -30.0), (from: "RIV", to: "ALY", value: -25.0),
+        // A live territorial dispute: baseline tension stays above the
+        // casus-belli line, so regional competition can turn into a crisis.
+        (from: "REG", to: "CLI", value: -75.0, source: "territorial dispute"),
+        (from: "CLI", to: "REG", value: -65.0, source: "territorial dispute"),
+        (from: "CLI", to: "HEG", value: 25.0), (from: "HEG", to: "CLI", value: 15.0),
+        (from: "TRD", to: "HEG", value: 15.0), (from: "HEG", to: "TRD", value: 15.0),
+        (from: "REG", to: "RIV", value: 20.0),
+    ],
+    treaties: [
+        (kind: DefensiveAlliance, a: "HEG", b: "ALY"),
+        (kind: Trade(deep: false), a: "HEG", b: "ALY"),
+        (kind: Guarantee, a: "HEG", b: "CLI"),
+        (kind: Trade(deep: false), a: "HEG", b: "TRD"),
+        (kind: Trade(deep: false), a: "RIV", b: "REG"),
+    ],
+    streams: [
+        (from: "HEG", to: "CLI", amount: 0.3),
+    ],
+    tensions: [
+        (a: "REG", b: "CLI", value: 55.0),
+    ],
+)

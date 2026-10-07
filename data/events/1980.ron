@@ -1,0 +1,35 @@
+// Event templates for the 1980 scenario (DESIGN principle 8; scenario-1980
+// E.2, P12). Each fires only from simulation conditions, then rests for its
+// cooldown, and changes ordinary state. No flat random bonuses, no dates,
+// no country names: any country that meets the conditions qualifies.
+[
+    // Debt Default + Contagion: heavy debt and a shrinking economy.
+    (id: "debt_default", title: "Debt default", chance: 0.25, cooldown: 24,
+     subject: [DebtRatioAbove(1.2), GrowthBelow(0.0)],
+     effects: [SubjectDebtWriteDown(0.4), SubjectFinancialWeight(-0.2), SubjectLegitimacy(-10.0),
+               SubjectProsperityShock(10.0), PartnersProsperityShock(3.0)]),
+    // Mass protests / strikes: unrest plus hardship.
+    (id: "mass_protests", title: "Mass protests", chance: 0.3, cooldown: 8,
+     subject: [StabilityBelow(40.0), ProsperityBelow(45.0)],
+     effects: [SubjectLegitimacy(-6.0), SubjectStability(-4.0)]),
+    // Opportunistic window: a weak, hostile neighbour invites border incidents.
+    (id: "border_incidents", title: "Border incidents", chance: 0.15, cooldown: 12,
+     subject: [AtPeace, NotGovernment(Democracy)],
+     object: Some([SameArea, TensionAbove(45.0), OpinionAtMost(-30.0), WeakerThanSubject(0.8)]),
+     effects: [PairTension(15.0), ObjectOpinion(-10.0)]),
+    // Diversionary claim: an unstable regime presses a claim on a weaker neighbour.
+    (id: "diversionary_claim", title: "Territorial claim pressed", chance: 0.2, cooldown: 16,
+     subject: [Government(Authoritarian), StabilityBelow(40.0)],
+     object: Some([SameArea, OpinionAtMost(-20.0), WeakerThanSubject(1.0), NoDefensivePact]),
+     effects: [PairTension(20.0), SubjectLegitimacy(4.0)]),
+    // Exercise war scare: two mobilized rivals with high tension.
+    (id: "war_scare", title: "Exercise war scare", chance: 0.25, cooldown: 12,
+     subject: [MobilizedAtLeast(Partial)],
+     object: Some([TensionAbove(50.0), MobilizedAtLeast(Partial)]),
+     effects: [PairTension(10.0), SubjectStability(-2.0), ObjectStability(-2.0)]),
+    // Hostage crisis: a revolutionary regime and a great power at high tension.
+    (id: "hostage_crisis", title: "Hostage crisis", chance: 0.3, cooldown: 6,
+     subject: [Government(Revolutionary)],
+     object: Some([PowerShareAtLeast(0.15), TensionAbove(60.0)]),
+     effects: [ObjectLegitimacy(-3.0), PairTension(5.0), SubjectLegitimacy(2.0)]),
+]

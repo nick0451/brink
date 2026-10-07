@@ -1,0 +1,7 @@
+/target
+# Godot editor cache and captured frame dumps (regenerable)
+/client/.godot/
+/client/out/
+# Patch leftovers
+*.orig
+*.rej
