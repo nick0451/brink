@@ -922,10 +922,44 @@ pub fn monetary_stance(view: &ObserverView, stance: sim_core::MonetaryStance) ->
     s
 }
 
+/// An oil exporter in the P5 sense: a producer that sells abroad at least
+/// 30% of its capacity (the producers that set a production policy, and
+/// those that would answer a flood).
+pub fn is_exporter(capacity: f64, net_exports: f64) -> bool {
+    capacity > 0.0 && net_exports > 0.3 * capacity
+}
+
+/// Money pressure on a producer, 0..1 (issue 27; own state only): its
+/// budget gap, the share of normal revenue (GDP × tax rate) its creditors
+/// take above the routine share ([`sim_core::money::ROUTINE_DEBT_SERVICE`]),
+/// less what an oil price above base pays back, measured against the most a
+/// price slump can cut an exporter's spending pool
+/// ([`sim_core::commodity::MAX_REVENUE_LOSS`]): a debt that eats as much of
+/// the budget as the worst glut leaves no room to wait at all. A slump by
+/// itself adds nothing: the model's budgets have no fixed claims but debt
+/// service, so a solvent rentier spends less and waits (Riyadh and Kuwait
+/// ran down reserves in 1982-85); only the creditor can't be told to wait.
+///
+/// Deliberately one-sided (review 27): a price above base relieves
+/// pressure, a price below base adds none, though a slump makes the fixed
+/// debt claim heavier. This stands in for the reserves the model doesn't
+/// have; making it two-sided without reserves makes every producer flood by
+/// t10-15 (issue 27's rejected variant). The scale is the glut cap
+/// `MAX_REVENUE_LOSS`: retuning that cap also retunes cheating.
+pub fn money_pressure(view: &ObserverView) -> f64 {
+    use sim_core::commodity::{revenue_factor, MAX_REVENUE_LOSS};
+    let own = &view.own;
+    let revenue = (own.gdp * own.tax_rate).max(1e-9);
+    let service = (own.debt_service / revenue - sim_core::money::ROUTINE_DEBT_SERVICE).max(0.0);
+    let windfall = (revenue_factor(own.energy_net_exports.max(0.0), own.gdp, view.energy.deviation()) - 1.0).max(0.0);
+    ((service - windfall) / MAX_REVENUE_LOSS).clamp(0.0, 1.0)
+}
+
 /// Value of a production policy for an energy exporter (scenario P5).
-/// Revenue: own output × price, with the price's response to our own
-/// market share; strategy: flooding squeezes hostile exporters, restraint
-/// squeezes hostile importers.
+/// Revenue: net exports × price, with the price's response to our own
+/// barrels and, for a flood, to the other exporters' answer in kind;
+/// strategy: flooding squeezes hostile exporters, restraint squeezes
+/// hostile importers.
 pub fn energy_policy(view: &ObserverView, policy: sim_core::ProductionPolicy) -> Score {
     use sim_core::commodity::PRICE_EXPONENT;
     let mut s = Score::new();
@@ -938,7 +972,36 @@ pub fn energy_policy(view: &ObserverView, policy: sim_core::ProductionPolicy) ->
     let ours = view.own.energy_capacity * current;
     let change = view.own.energy_capacity * policy.factor() - ours;
     // Price response: ΔP/P ≈ −k × Δsupply/supply.
-    let dp = (-PRICE_EXPONENT * change / m.supply).max(-0.9);
+    let price_response = |extra: f64| (-PRICE_EXPONENT * extra / m.supply).max(-0.9);
+    let dp_own = price_response(change);
+    // Breaking ranks invites an answer in kind (issue 26): a flood, started
+    // or kept up, is weighed at the price left once every other exporter
+    // still holding back floods too, the price war. With demand this
+    // inelastic, any producer under a fifth of the market gains by flooding
+    // if the others sit still (so every one of them flooded, every run, from
+    // the second year); none gains once they answer. Restraint invites no
+    // answer: the others take the price and keep their barrels (Saudi
+    // Arabia's cuts of 1981-85 were free-ridden). Once the others are
+    // already flooding there is no one left to provoke and no price left to
+    // defend alone, so joining pays again.
+    let answer: f64 = if policy == sim_core::ProductionPolicy::Flood {
+        view.others
+            .iter()
+            .filter(|f| is_exporter(f.energy_capacity, f.energy_net_exports))
+            .map(|f| f.energy_capacity * (sim_core::ProductionPolicy::Flood.factor() - f.energy_policy.factor()))
+            .sum()
+    } else {
+        0.0
+    };
+    // Money pressure (issue 27): a producer that needs the cash now weighs
+    // the barrels it sells this quarter above the price war that may follow,
+    // discounting the others' answer by its budget gap (`money_pressure`).
+    // OPEC's quota cheating of 1982-86 came from the members whose debts
+    // came due at Volcker rates (Nigeria, Venezuela; Iran and Iraq at war);
+    // the producers with reserves could afford to wait.
+    let pressure = money_pressure(view);
+    let dp_feared = price_response(change + answer);
+    let dp = price_response(change + answer * (1.0 - pressure));
     // Revenue is earned on what is sold abroad, not on what is pumped (the
     // market's `revenue_factor` is on net exports): a producer that burns
     // most of its own output loses half its exports to a 15% cut and gains
@@ -946,10 +1009,19 @@ pub fn energy_policy(view: &ObserverView, policy: sim_core::ProductionPolicy) ->
     // for a rentier. The USSR of the 1980s was a volume-maximising
     // price-taker for exactly this reason; Saudi Arabia could swing.
     let exports = view.own.energy_net_exports.max(1e-9);
-    let revenue_ratio = ((exports + change) / exports).max(0.0) * (1.0 + dp) - 1.0;
+    let revenue = |dp: f64| ((exports + change) / exports).max(0.0) * (1.0 + dp) - 1.0;
     let dependence = (view.own.energy_net_exports / view.own.gdp).clamp(0.0, 3.0);
-    s.add("export revenue", 40.0 * revenue_ratio * dependence * (0.5 + pers.greed));
+    let weight = 40.0 * dependence * (0.5 + pers.greed);
+    s.add("export revenue", weight * revenue(dp_feared));
+    if dp != dp_feared {
+        s.add(
+            "we need the cash now (the price war can wait)",
+            weight * (revenue(dp) - revenue(dp_feared)),
+        );
+    }
     // Squeezing others: price moves hit hostile exporters and importers.
+    // Only our own barrels count here: the others' answer would hurt us as
+    // much as our rival, so it is a risk we run, not a weapon we hold.
     let mut squeeze = 0.0;
     for f in &view.others {
         let hostility = (-f.our_opinion_of_them / 100.0).max(f.tension / 100.0).clamp(0.0, 1.0);
@@ -957,7 +1029,7 @@ pub fn energy_policy(view: &ObserverView, policy: sim_core::ProductionPolicy) ->
             continue;
         }
         let exposure = (f.energy_net_exports / f.gdp.max(1e-9)).clamp(-1.0, 3.0);
-        squeeze += -dp * exposure * hostility;
+        squeeze += -dp_own * exposure * hostility;
     }
     s.add(
         "squeezing hostile producers and consumers",

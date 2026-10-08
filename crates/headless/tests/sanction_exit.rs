@@ -140,7 +140,10 @@ fn campaign_lifts_without_flicker() {
     use sim_core::{CauseCode, EntryKind};
     let def = scenario::load(workspace_root().join("data/scenarios/1980.ron")).unwrap();
     let (mut lifts, mut reimposed, mut flicker) = (0, 0, Vec::new());
-    for seed in 1..=8 {
+    // 16 campaigns: the "returned for a new cause" check rested on a single
+    // re-imposition in 8 (issue 26 moved it to seed 9); the flicker check
+    // gets twice the coverage.
+    for seed in 1..=16 {
         let r = headless::run_campaign(&def, seed, def.turns).unwrap();
         let acts: Vec<(u32, CountryId, CountryId, CauseCode)> = r
             .ledger_log
@@ -180,7 +183,7 @@ fn campaign_lifts_without_flicker() {
         }
     }
     println!("lifts {lifts}, re-impositions after a lift {reimposed}");
-    assert!(lifts > 0, "no sanction lifted in 8 campaigns");
+    assert!(lifts > 0, "no sanction lifted in 16 campaigns");
     assert!(flicker.is_empty(), "re-imposed with no new hostile act since the lift: {flicker:?}");
     assert!(reimposed > 0, "no lifted sanction ever returned, not even for a new cause");
 }

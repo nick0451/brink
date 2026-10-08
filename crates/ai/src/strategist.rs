@@ -400,7 +400,12 @@ impl Controller for Strategist {
         self.pursue_goals(view, &mut budget, &mut d);
 
         // 5b. Energy production policy for exporters (scenario P5, free).
-        if view.own.energy_capacity > 0.0 && view.own.energy_net_exports > 0.3 * view.own.energy_capacity {
+        // A producer that stopped exporting still reviews a non-Normal
+        // policy, or a flood set while it exported could never be revoked
+        // (review 26: China's own demand overtook its output mid-campaign).
+        if evaluate::is_exporter(view.own.energy_capacity, view.own.energy_net_exports)
+            || view.own.energy_policy != sim_core::ProductionPolicy::Normal
+        {
             let mut best: Option<(sim_core::ProductionPolicy, Score)> = None;
             for p in [
                 sim_core::ProductionPolicy::Restrain,

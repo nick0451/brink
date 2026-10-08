@@ -276,6 +276,7 @@ fn main() -> ExitCode {
                 println!("{}", headless::diagnose::grudges(&runs, &codes));
                 println!("{}", headless::diagnose::deepened_grudges(&runs, &codes));
                 println!("{}", headless::diagnose::creditors(&runs, &codes));
+                println!("{}", headless::diagnose::energy_policies(&runs));
             }
             "wartrace" => {
                 // Turn-by-turn trace of every war (issue 22).
@@ -378,7 +379,7 @@ fn print_gate6(runs: &[RunResult]) {
     let any_regime = ps.iter().filter(|p| p.regime_changes > 0).count() as f64 / n;
     let swing = ps.iter().filter(|p| p.price_swing >= 1.5).count() as f64 / n;
     println!(
-        "oil price swing of 50%+ in {:.0}% of runs (target > 70%)",
+        "oil price swing of 50%+ after year 1 in {:.0}% of runs (target > 70%)",
         100.0 * swing
     );
     let nuclear = ps.iter().filter(|p| p.nuclear_uses > 0).count() as f64 / n;

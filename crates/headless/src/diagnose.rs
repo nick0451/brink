@@ -1713,3 +1713,80 @@ pub fn war_trace(runs: &[RunResult], codes: &[String]) -> String {
     }
     out
 }
+
+/// Oil production policy (P5): share of turns each producer spends on
+/// Restrain / Normal / Flood by five-year period (from the policy-change
+/// records; everyone starts on Normal), policy switches per run, and the
+/// median oil price per period.
+pub fn energy_policies(runs: &[RunResult]) -> String {
+    const PERIODS: [(u32, u32, &str); 4] = [
+        (0, 20, "80-84"),
+        (20, 40, "85-89"),
+        (40, 60, "90-94"),
+        (60, 81, "95-99"),
+    ];
+    // country -> period -> [restrain, normal, flood] turn counts
+    let mut acc: BTreeMap<String, [[u32; 3]; 4]> = BTreeMap::new();
+    let mut switches: BTreeMap<String, u32> = BTreeMap::new();
+    let mut prices: [Vec<f64>; 4] = Default::default();
+    for r in runs {
+        let mut changes: BTreeMap<String, Vec<(u32, usize)>> = BTreeMap::new();
+        for e in &r.reasoning {
+            if let Some(p) = e.decision.subject.strip_prefix("energy policy: ") {
+                let k = match p {
+                    "Restrain" => 0,
+                    "Flood" => 2,
+                    _ => 1,
+                };
+                changes.entry(e.country.clone()).or_default().push((e.turn, k));
+                *switches.entry(e.country.clone()).or_default() += 1;
+            }
+        }
+        for (c, ch) in &changes {
+            let a = acc.entry(c.clone()).or_default();
+            for t in 0..r.turns {
+                // A change decided on turn t applies from turn t + 1.
+                let k = ch.iter().rev().find(|x| x.0 < t).map_or(1, |x| x.1);
+                if let Some(pi) = PERIODS.iter().position(|p| t >= p.0 && t < p.1) {
+                    a[pi][k] += 1;
+                }
+            }
+        }
+        for s in &r.samples {
+            if let Some(pi) = PERIODS.iter().position(|p| s.turn >= p.0 && s.turn < p.1) {
+                prices[pi].push(s.energy_price);
+            }
+        }
+    }
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "ENERGY POLICY (% of turns restrain/normal/flood per period; producers that ever switched; {} runs)",
+        runs.len()
+    );
+    let _ = write!(out, "{:5}", "");
+    for p in PERIODS {
+        let _ = write!(out, " {:>13}", p.2);
+    }
+    let _ = writeln!(out, " switches/run");
+    for (c, a) in &acc {
+        let _ = write!(out, "{c:5}");
+        for row in a {
+            let n = row.iter().sum::<u32>().max(1) as f64;
+            let _ = write!(
+                out,
+                " {:>3.0}/{:>3.0}/{:>3.0}  ",
+                100.0 * row[0] as f64 / n,
+                100.0 * row[1] as f64 / n,
+                100.0 * row[2] as f64 / n
+            );
+        }
+        let _ = writeln!(out, " {:.1}", switches[c] as f64 / runs.len() as f64);
+    }
+    let _ = write!(out, "price median");
+    for p in prices {
+        let _ = write!(out, " {:>13.2}", median(p));
+    }
+    let _ = writeln!(out);
+    out
+}

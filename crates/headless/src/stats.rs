@@ -157,7 +157,9 @@ fn band_in(subject: &str, marker: &str) -> Option<u8> {
 /// Plausibility facts per run (scenario-1980 E.3; the measurable subset).
 #[derive(Clone, Debug, Default)]
 pub struct Plausibility {
-    /// Largest max ÷ min of the energy price within the run.
+    /// Largest max ÷ min of the energy price within the run, from one year
+    /// after the start (D101: the scenario's opening price settling in its
+    /// first year is a starting condition, not something the run did).
     pub price_swing: f64,
     pub wars: usize,
     pub nuclear_uses: usize,
@@ -181,7 +183,13 @@ pub struct Plausibility {
 pub fn plausibility(r: &RunResult) -> Plausibility {
     let codes: Vec<String> = r.samples[0].countries.iter().map(|c| c.code.clone()).collect();
     let mut p = Plausibility::default();
-    let prices: Vec<f64> = r.samples.iter().map(|s| s.energy_price).collect();
+    let start = r.samples[0].year;
+    let prices: Vec<f64> = r
+        .samples
+        .iter()
+        .filter(|s| s.year >= start + 1.0)
+        .map(|s| s.energy_price)
+        .collect();
     let (lo, hi) = prices
         .iter()
         .fold((f64::MAX, f64::MIN), |(a, b), &x| (a.min(x), b.max(x)));
