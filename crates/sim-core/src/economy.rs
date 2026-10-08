@@ -105,6 +105,7 @@ pub fn run(state: &mut WorldState) {
         let revenue = c.gdp * c.tax_rate;
         let debt_service = c.debt_service;
         let energy = crate::commodity::revenue_factor(c.energy_net_exports, c.gdp, deviation);
+        let energy = crate::commodity::oil_budget(c, energy);
         pools[i] = (revenue * energy * (1.0 + c.deficit_ratio) - debt_service).max(0.0);
         c.debt += revenue * c.deficit_ratio;
         // War consumption on credit: the bill is borrowed, not bought (the

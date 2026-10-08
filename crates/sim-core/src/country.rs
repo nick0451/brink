@@ -339,6 +339,10 @@ pub struct CountrySetup {
     /// Energy production capacity per turn (DESIGN §2.4). 0 = the scenario
     /// doesn't model energy for this country.
     pub energy_capacity: f64,
+    /// Foreign reserves an oil exporter's budget can draw on (issue 28),
+    /// in money units (quarterly revenue = GDP × tax rate).
+    #[serde(default)]
+    pub reserves: f64,
     /// Strategic arsenal level 0–3 (DESIGN §11.4).
     pub arsenal: u8,
     /// Is the arsenal publicly declared? (P10; default true.)
@@ -471,6 +475,19 @@ pub struct Country {
     pub energy_policy: crate::commodity::ProductionPolicy,
     /// Output minus consumption last turn (negative = importer).
     pub energy_net_exports: f64,
+    /// Foreign reserves (issue 28): an exporter's windfall above its
+    /// committed spending fills them, a slump below it draws them down.
+    #[serde(default)]
+    pub reserves: f64,
+    /// The oil-revenue factor ([`crate::commodity::revenue_factor`]) the
+    /// budget is committed to: spending follows revenue only slowly
+    /// ([`crate::commodity::SPENDING_ADJUST`]). `None` until the first
+    /// market clears (the opening budget is built on the opening price).
+    #[serde(default)]
+    pub oil_budget: Option<f64>,
+    /// Reserves drawn this turn (negative = saved).
+    #[serde(default)]
+    pub reserve_draw: f64,
     /// Strength received and given as arms this turn (DESIGN §21.6).
     pub arms_in: f64,
     pub arms_out: f64,
@@ -586,6 +603,9 @@ impl Country {
             energy_capacity: s.energy_capacity.max(0.0),
             energy_policy: Default::default(),
             energy_net_exports: s.energy_capacity.max(0.0) - s.gdp.max(0.001) * crate::commodity::ENERGY_INTENSITY,
+            reserves: s.reserves.max(0.0),
+            oil_budget: None,
+            reserve_draw: 0.0,
             arms_in: 0.0,
             arms_out: 0.0,
             arms_out_total: 0.0,

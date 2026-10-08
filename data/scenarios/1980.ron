@@ -106,6 +106,7 @@ Scenario(
         (
             id: "IRN", name: "Iran", government: Revolutionary, tier: Playable, area: Some("middle_east"), alignment: None,
             population: 39, gdp: 3, tax_rate: 0.35, debt: 1.20, financial_weight: 0.0,
+            reserves: 0.60,
             budget: (military: 0.3, development: 0.25, welfare: 0.35, intelligence: 0.1),
             military: 9.00, military_cost: 0.35, force_mix: (land: 0.676, naval: 0.108, air: 0.216),
             military_tech: 3, intel_tech: 3, stability: 45, legitimacy: 60,
@@ -119,6 +120,7 @@ Scenario(
         (
             id: "IRQ", name: "Iraq", government: Authoritarian, tier: Playable, area: Some("middle_east"), alignment: None,
             population: 13, gdp: 2, tax_rate: 0.45, debt: 0.80, financial_weight: 0.0,
+            reserves: 1.20,
             budget: (military: 0.45, development: 0.10, welfare: 0.35, intelligence: 0.1),
             military: 8.10, military_cost: 0.5, force_mix: (land: 0.710, naval: 0.032, air: 0.258),
             military_tech: 4, intel_tech: 3, stability: 55, legitimacy: 50,
@@ -131,6 +133,7 @@ Scenario(
         (
             id: "SAU", name: "Saudi Arabia", government: Authoritarian, tier: Playable, area: Some("middle_east"), alignment: None,
             population: 10, gdp: 6, tax_rate: 0.45, debt: 1.20, financial_weight: 0.2,
+            reserves: 14.40,
             budget: (military: 0.3, development: 0.25, welfare: 0.35, intelligence: 0.1),
             military: 5.40, military_cost: 1.5, force_mix: (land: 0.294, naval: 0.118, air: 0.588),
             military_tech: 4, intel_tech: 2, stability: 65, legitimacy: 65,
@@ -324,6 +327,7 @@ Scenario(
         (
             id: "KWT", name: "Kuwait", government: Authoritarian, tier: Minor, area: Some("middle_east"), alignment: None,
             population: 1.4, gdp: 1.2, tax_rate: 0.4, debt: 0.24, financial_weight: 0.1,
+            reserves: 9.60,
             budget: (military: 0.08, development: 0.47, welfare: 0.35, intelligence: 0.1),
             military: 0.26, military_cost: 1.5, force_mix: (land: 0.400, naval: 0.200, air: 0.400),
             military_tech: 3, intel_tech: 2, stability: 65, legitimacy: 65,

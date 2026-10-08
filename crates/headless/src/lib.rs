@@ -44,6 +44,12 @@ pub struct CountrySample {
     pub protectors: Vec<String>,
     /// Strategic arsenal level (canonical; wars on nuclear states by aim).
     pub arsenal: u8,
+    /// Oil budget (issue 28): reserves in quarters of normal revenue, the
+    /// committed spending above oil revenue and the part reserves no longer
+    /// carry (shares of normal revenue).
+    pub reserves: f64,
+    pub oil_gap: f64,
+    pub oil_unfunded: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -223,6 +229,10 @@ fn relation_sample(state: &WorldState) -> RelationSample {
     }
 }
 
+fn oil_factor(state: &WorldState, c: &sim_core::Country) -> f64 {
+    sim_core::commodity::revenue_factor(c.energy_net_exports, c.gdp, state.energy.deviation())
+}
+
 pub fn sample(state: &WorldState) -> TurnSample {
     let burden: Vec<f64> = state
         .ids()
@@ -266,6 +276,9 @@ pub fn sample(state: &WorldState) -> TurnSample {
                     .map(|d| state.country(d).code.clone())
                     .collect(),
                 arsenal: c.arsenal,
+                reserves: c.reserves / (c.gdp * c.tax_rate).max(1e-9),
+                oil_gap: sim_core::commodity::budget_gap(c, oil_factor(state, c)),
+                oil_unfunded: sim_core::commodity::unfunded_gap(c, oil_factor(state, c)),
             })
             .collect(),
     }

@@ -1788,5 +1788,73 @@ pub fn energy_policies(runs: &[RunResult]) -> String {
         let _ = write!(out, " {:>13.2}", median(p));
     }
     let _ = writeln!(out);
+    // Why the floods (issue 28): flood decisions whose reasoning names
+    // running reserves, debt alone, or neither (war, squeeze, joining).
+    let mut why: BTreeMap<String, [u32; 3]> = BTreeMap::new();
+    for r in runs {
+        for e in &r.reasoning {
+            if e.decision.subject != "energy policy: Flood" {
+                continue;
+            }
+            let k = match e.decision.lines.iter().find(|l| l.term == "we_need_the_cash_now__the_price_war_can_wait_") {
+                Some(l) if l.label.starts_with("reserves") => 0,
+                Some(_) => 1,
+                None => 2,
+            };
+            why.entry(e.country.clone()).or_default()[k] += 1;
+        }
+    }
+    let _ = writeln!(out, "floods by reason (decisions; reserves low / debt / neither):");
+    for (c, w) in &why {
+        let _ = writeln!(out, "  {c:5} {:>4} {:>4} {:>4}", w[0], w[1], w[2]);
+    }
+    out.push_str(&oil_reserves(runs, &PERIODS));
+    out
+}
+
+/// Oil budgets (issue 28): for each exporter that ever held reserves or ran
+/// a budget gap, the median reserves (quarters of normal revenue) and gap
+/// (% of normal revenue) per period, and the share of turns with part of
+/// the gap unfunded (reserves under `RESERVE_COVER` quarters of it).
+fn oil_reserves(runs: &[RunResult], periods: &[(u32, u32, &str); 4]) -> String {
+    // Per period: reserves, gap, turns with the gap partly unfunded.
+    type Period = (Vec<f64>, Vec<f64>, u32);
+    let mut acc: BTreeMap<String, [Period; 4]> = BTreeMap::new();
+    let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+    for r in runs {
+        for s in &r.samples {
+            let Some(pi) = periods.iter().position(|p| s.turn >= p.0 && s.turn < p.1) else {
+                continue;
+            };
+            for c in &s.countries {
+                if c.reserves > 1e-6 || c.oil_gap > 1e-6 {
+                    seen.insert(c.code.clone(), true);
+                }
+                let a = &mut acc.entry(c.code.clone()).or_default()[pi];
+                a.0.push(c.reserves);
+                a.1.push(100.0 * c.oil_gap);
+                a.2 += u32::from(c.oil_unfunded > 0.0);
+            }
+        }
+    }
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "OIL RESERVES (issue 28; median reserves in quarters of revenue | median budget gap % of revenue | % of turns with the gap partly unfunded)"
+    );
+    for (c, a) in acc.iter().filter(|(c, _)| seen.contains_key(*c)) {
+        let _ = write!(out, "{c:5}");
+        for p in a {
+            let n = p.0.len().max(1) as f64;
+            let _ = write!(
+                out,
+                " {:>5.1}|{:>3.0}|{:>3.0}%",
+                median(p.0.clone()),
+                median(p.1.clone()),
+                100.0 * p.2 as f64 / n
+            );
+        }
+        let _ = writeln!(out);
+    }
     out
 }

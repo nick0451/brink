@@ -64,8 +64,16 @@ fn a_producer_holds_its_output_when_a_flood_would_start_a_price_war() {
             "{code}: a price war costs it revenue"
         );
     }
-    // And over a campaign: no peaceful exporter floods in the first five years.
-    let def = def1980();
+    // And over a campaign: no peaceful exporter floods in the first five
+    // years by default. Issue 28 gave exporters rigid budgets and reserves,
+    // and with the scenario's reserves the Gulf's run out in 1981-83 (a new,
+    // stated cause: "reserves N quarters left"); this check guards D100's
+    // default-flood defect, so it runs on a data swap whose reserves never
+    // run out (`oil_reserves.rs` covers what happens when they do).
+    let mut def = def1980();
+    for c in &mut def.countries {
+        c.reserves = 1000.0 * c.gdp;
+    }
     let r = headless::run_campaign(&def, 1, 20).unwrap();
     let floods: Vec<_> = r
         .reasoning

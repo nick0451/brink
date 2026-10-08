@@ -162,6 +162,9 @@ pub struct CountryDef {
     pub tax_rate: f64,
     #[serde(default)]
     pub debt: f64,
+    /// Foreign reserves (issue 28), money units.
+    #[serde(default)]
+    pub reserves: f64,
     #[serde(default)]
     pub financial_weight: f64,
     pub budget: BudgetShares,
@@ -368,6 +371,7 @@ pub fn build(def: &ScenarioDef, seed: Option<u64>) -> Result<WorldState, String>
                 gdp: c.gdp,
                 tax_rate: c.tax_rate,
                 debt: c.debt,
+                reserves: c.reserves,
                 financial_weight: c.financial_weight,
                 budget: c.budget,
                 deficit_ratio: c.deficit_ratio,

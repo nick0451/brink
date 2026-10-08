@@ -102,6 +102,16 @@ PROGRAMME = {"ZAF": 70, "IND": 60, "PAK": 35, "IRQ": 25, "PRK": 15, "TWN": 15, "
 # Post-1979 shock: start high, with a balanced market underneath (the glut).
 ENERGY_PRICE = 1.5
 
+# Foreign reserves an oil budget can draw on (issue 28), as a share of annual
+# GDP (like debt). Saudi official foreign assets ~$100bn in 1980 on a ~$165bn
+# economy (peak ~$120-150bn in 1982, ~$50bn by 1988); Kuwait's ~$65-80bn
+# (General Reserve plus the Fund for Future Generations) on ~$28bn; Iraq held
+# ~$35bn when it invaded Iran but spent it on the war in 1980-82 (the war bill
+# is booked as debt here, issue 21, so only the remnant is a budget reserve);
+# Iran's ~$12bn was frozen in the US until 1981. Other exporters: none to
+# speak of (the USSR's gold is not a budget reserve).
+RESERVES = {"SAU": 0.6, "KWT": 2.0, "IRQ": 0.15, "IRN": 0.05}
+
 # E.1: Iran's army purged after the revolution.
 READINESS = {"IRN": 0.15}
 # Rulers brought by revolution or installed by a conqueror, turn relative to
@@ -153,6 +163,8 @@ for (code, name, gov, tier, area, align, pop, gdp, tax, debt_r, fw, share, land,
     out("        (")
     out(f'            id: "{code}", name: "{name}", government: {gov}, tier: {tier}, area: Some("{area}"), alignment: {al},')
     out(f"            population: {pop}, gdp: {gdp}, tax_rate: {tax}, debt: {debt:.2f}, financial_weight: {fw},")
+    if code in RESERVES:
+        out(f"            reserves: {RESERVES[code] * 4 * gdp:.2f},")
     out(f"            budget: (military: {share}, development: {dev:.2f}, welfare: {welfare}, intelligence: {intel}),")
     out(f"            military: {strength:.2f}, military_cost: {cost}, force_mix: (land: {mix[0]:.3f}, naval: {mix[1]:.3f}, air: {mix[2]:.3f}),")
     out(f"            military_tech: {tm}, intel_tech: {ti}, stability: {stab}, legitimacy: {legit},")

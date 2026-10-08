@@ -38,6 +38,19 @@ pub const MAX_ENERGY_GROWTH: f64 = 0.01;
 const ENERGY_REVENUE: f64 = 0.3;
 /// The most a low price can cut an exporter's spending pool.
 pub const MAX_REVENUE_LOSS: f64 = 0.3;
+/// Share of the gap between an exporter's committed oil spending and its
+/// oil revenue closed each turn (issue 28). Budgets built on a price are
+/// rigid both ways: payrolls, subsidies and arms contracts are cut slowly
+/// (~20% of the gap a year; the gap halves in about three years), and a
+/// windfall is spent only as fast as projects can be started. Saudi
+/// spending fell ~40% over 1982-86 while its oil revenue fell ~75%; the
+/// difference came out of reserves (~$120bn to ~$50bn by 1988).
+pub const SPENDING_ADJUST: f64 = 0.05;
+/// Quarters of the current budget gap below which reserves no longer let a
+/// government wait (issue 28): a finance ministry that can see the bottom of
+/// the account within a year and a half spends the next barrel, not the
+/// next decade.
+pub const RESERVE_COVER: f64 = 6.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProductionPolicy {
@@ -133,4 +146,58 @@ pub fn growth_effect(net_exports: f64, gdp: f64, deviation: f64) -> f64 {
 /// Spending-pool multiplier from the price (1 = neutral).
 pub fn revenue_factor(net_exports: f64, gdp: f64, deviation: f64) -> f64 {
     1.0 + (ENERGY_REVENUE * net_exports / gdp.max(1e-9) * deviation).clamp(-MAX_REVENUE_LOSS, 0.6)
+}
+
+/// An exporter's oil budget for this turn (issue 28): returns the
+/// spending-pool multiplier actually spent and books the reserves. A
+/// country spends at its committed level (`oil_budget`): revenue above it
+/// is saved, a shortfall is drawn from reserves while they last and cut
+/// from spending once they are gone. The commitment then moves
+/// [`SPENDING_ADJUST`] of the way toward this turn's revenue. Importers and
+/// countries that no longer export spend their revenue as it comes.
+pub fn oil_budget(c: &mut crate::country::Country, revenue_factor: f64) -> f64 {
+    let committed = *c.oil_budget.get_or_insert(revenue_factor);
+    if c.energy_net_exports <= 0.0 {
+        c.oil_budget = Some(revenue_factor);
+        c.reserve_draw = 0.0;
+        return revenue_factor;
+    }
+    let revenue = (c.gdp * c.tax_rate).max(1e-9);
+    // Positive: the shortfall to draw; negative: the windfall to save.
+    let draw = (revenue * (committed - revenue_factor)).min(c.reserves);
+    c.reserves -= draw;
+    c.reserve_draw = draw;
+    c.oil_budget = Some(committed + (revenue_factor - committed) * SPENDING_ADJUST);
+    revenue_factor + draw / revenue
+}
+
+/// The oil budget gap: committed spending above this revenue, as a share
+/// of normal revenue (0 for an importer or a budget that fits).
+pub fn budget_gap(c: &crate::country::Country, revenue_factor: f64) -> f64 {
+    if c.energy_net_exports <= 0.0 {
+        return 0.0;
+    }
+    c.oil_budget.map_or(0.0, |b| (b - revenue_factor).max(0.0))
+}
+
+/// Quarters of the current gap the reserves still cover (infinite with no
+/// gap).
+pub fn reserve_quarters(c: &crate::country::Country, revenue_factor: f64) -> f64 {
+    let gap = budget_gap(c, revenue_factor) * c.gdp * c.tax_rate;
+    if gap <= 1e-12 {
+        f64::INFINITY
+    } else {
+        c.reserves / gap
+    }
+}
+
+/// The part of the gap the reserves can no longer carry, as a share of
+/// normal revenue: none while they cover [`RESERVE_COVER`] quarters, all of
+/// it once they are gone.
+pub fn unfunded_gap(c: &crate::country::Country, revenue_factor: f64) -> f64 {
+    let gap = budget_gap(c, revenue_factor);
+    if gap <= 0.0 {
+        return 0.0;
+    }
+    gap * (1.0 - reserve_quarters(c, revenue_factor) / RESERVE_COVER).clamp(0.0, 1.0)
 }

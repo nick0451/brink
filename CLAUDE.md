@@ -59,6 +59,12 @@ When a decision changes DESIGN.md, also record it in the STATE.md decisions log 
     - Black is the default setting.
     - Hard guardrails in design/behaviour-and-voice.md §2.3: never victims, peoples, faiths, real atrocities, famine or nuclear use; text speaks as offices, not named people.
     - **Portraits** may be recognisable caricatures of real leaders (D56), under the caricature rules in §2.3.
+15. **Dense markers, deep butterfly effects, within a depth limit (D103, user directive).** BRINK is a dark-satire historical game: the point is many interacting simulation markers, so decisions ripple into deep, unexpected consequences. Every new marker must pass four tests:
+    - **Traceable:** any consequence can be explained back to a decision in at most 5 hops through the ledger or reasoning log, and the chain is shown to the player.
+    - **Alive:** it changes at least one decision or outcome in measured runs.
+    - **Voiced:** it gives the satirical voice a true, specific trigger (a ledger contradiction, a statistic, a reversal).
+    - **Visible:** the player can see the marker's value and its last cause.
+    - **Stopping rule:** stop chasing one historical outcome after two consecutive issues that move it by less than 5 points; record it as a KNOWN GAP and move on.
 
 ## Confirmed user decisions (don't revisit without being asked)
 

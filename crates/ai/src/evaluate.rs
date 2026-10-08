@@ -929,30 +929,40 @@ pub fn is_exporter(capacity: f64, net_exports: f64) -> bool {
     capacity > 0.0 && net_exports > 0.3 * capacity
 }
 
-/// Money pressure on a producer, 0..1 (issue 27; own state only): its
-/// budget gap, the share of normal revenue (GDP × tax rate) its creditors
-/// take above the routine share ([`sim_core::money::ROUTINE_DEBT_SERVICE`]),
-/// less what an oil price above base pays back, measured against the most a
-/// price slump can cut an exporter's spending pool
-/// ([`sim_core::commodity::MAX_REVENUE_LOSS`]): a debt that eats as much of
-/// the budget as the worst glut leaves no room to wait at all. A slump by
-/// itself adds nothing: the model's budgets have no fixed claims but debt
-/// service, so a solvent rentier spends less and waits (Riyadh and Kuwait
-/// ran down reserves in 1982-85); only the creditor can't be told to wait.
+/// Money pressure on a producer, 0..1 (issues 27 and 28; own state only):
+/// the share of normal revenue (GDP × tax rate) it can't spend as it has
+/// promised, measured against the most a price slump can cut an exporter's
+/// spending pool ([`sim_core::commodity::MAX_REVENUE_LOSS`]). Two claims:
 ///
-/// Deliberately one-sided (review 27): a price above base relieves
-/// pressure, a price below base adds none, though a slump makes the fixed
-/// debt claim heavier. This stands in for the reserves the model doesn't
-/// have; making it two-sided without reserves makes every producer flood by
-/// t10-15 (issue 27's rejected variant). The scale is the glut cap
+/// - **Debt** (issue 27): what its creditors take above the routine share
+///   ([`sim_core::money::ROUTINE_DEBT_SERVICE`]), less what an oil price
+///   above base pays back. The creditor can't be told to wait.
+/// - **The budget gap once reserves run low** (issue 28): committed
+///   spending above this quarter's oil revenue
+///   ([`sim_core::commodity::unfunded_gap`]). While reserves cover
+///   [`sim_core::commodity::RESERVE_COVER`] quarters of the gap a rentier
+///   draws them and waits (Riyadh and Kuwait in 1982-85); as they run out
+///   the gap counts in full.
+///
+/// A slump with ample reserves still adds nothing; without them it is
+/// two-sided (issue 27's rejected variant applied that to every producer
+/// at once, with no reserves anywhere). The scale is the glut cap
 /// `MAX_REVENUE_LOSS`: retuning that cap also retunes cheating.
 pub fn money_pressure(view: &ObserverView) -> f64 {
-    use sim_core::commodity::{revenue_factor, MAX_REVENUE_LOSS};
+    let (debt, slump) = money_pressure_parts(view);
+    ((debt + slump) / sim_core::commodity::MAX_REVENUE_LOSS).clamp(0.0, 1.0)
+}
+
+/// The two claims behind [`money_pressure`], as shares of normal revenue:
+/// (debt service above routine less the windfall, unfunded budget gap).
+pub fn money_pressure_parts(view: &ObserverView) -> (f64, f64) {
+    use sim_core::commodity::{revenue_factor, unfunded_gap};
     let own = &view.own;
     let revenue = (own.gdp * own.tax_rate).max(1e-9);
     let service = (own.debt_service / revenue - sim_core::money::ROUTINE_DEBT_SERVICE).max(0.0);
+    let factor = revenue_factor(own.energy_net_exports, own.gdp, view.energy.deviation());
     let windfall = (revenue_factor(own.energy_net_exports.max(0.0), own.gdp, view.energy.deviation()) - 1.0).max(0.0);
-    ((service - windfall) / MAX_REVENUE_LOSS).clamp(0.0, 1.0)
+    ((service - windfall).max(0.0), unfunded_gap(own, factor))
 }
 
 /// Value of a production policy for an energy exporter (scenario P5).
@@ -1014,8 +1024,19 @@ pub fn energy_policy(view: &ObserverView, policy: sim_core::ProductionPolicy) ->
     let weight = 40.0 * dependence * (0.5 + pers.greed);
     s.add("export revenue", weight * revenue(dp_feared));
     if dp != dp_feared {
-        s.add(
-            "we need the cash now (the price war can wait)",
+        // Say why (issue 28): reserves running out, or the creditors,
+        // whichever claim is larger (review 28: any gap at all used to win).
+        let factor = sim_core::commodity::revenue_factor(view.own.energy_net_exports, view.own.gdp, m.deviation());
+        let (debt, slump) = money_pressure_parts(view);
+        let label = if slump > debt {
+            let q = sim_core::commodity::reserve_quarters(&view.own, factor);
+            format!("reserves {q:.0} quarters left: we need the cash now (the price war can wait)")
+        } else {
+            "we need the cash now (the price war can wait)".to_string()
+        };
+        s.add_term(
+            "we_need_the_cash_now__the_price_war_can_wait_",
+            label,
             weight * (revenue(dp) - revenue(dp_feared)),
         );
     }

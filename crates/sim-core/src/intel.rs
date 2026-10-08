@@ -57,6 +57,7 @@ mod tests {
                 gdp: 10.0,
                 tax_rate: 0.2,
                 debt: 0.0,
+                reserves: 0.0,
                 financial_weight: 0.0,
                 budget: BudgetShares {
                     military: 0.25,

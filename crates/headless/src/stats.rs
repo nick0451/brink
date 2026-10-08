@@ -324,6 +324,9 @@ mod tests {
             debt_service_hit: 0.0,
             protectors: Vec::new(),
             arsenal: 0,
+            reserves: 0.0,
+            oil_gap: 0.0,
+            oil_unfunded: 0.0,
         }
     }
 
