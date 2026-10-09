@@ -98,6 +98,11 @@ pub struct ScenarioDef {
     /// Starting world inflation level (P7; 1 = severe 1970s inflation).
     #[serde(default)]
     pub inflation: f64,
+    /// Countries a human may choose to play (codes; front-end only, D105
+    /// #7). Empty = every active `Playable` country. Presentation data: the
+    /// simulation never reads it.
+    #[serde(default)]
+    pub selectable: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

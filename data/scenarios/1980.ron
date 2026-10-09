@@ -15,6 +15,7 @@ Scenario(
     energy_outside_supply: 60.32,
     include_reflexes: ["../reflexes/1980.ron"],
     include_events: ["../events/1980.ron"],
+    selectable: ["USA", "SOV"],
     countries: [
         (
             id: "USA", name: "United States", government: Democracy, tier: Playable, area: Some("americas"), alignment: Some("west"),

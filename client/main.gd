@@ -4,8 +4,12 @@ extends Node3D
 ## city), event markers, NES narration popups, CRT post pass.
 ## Presentation only: everything drawn comes from BrinkSim (the Rust sim).
 ##
-## Controls: Space = next turn, P = autoplay, wheel = zoom,
-## right/middle drag or WASD = pan. User arg `--demo` runs a scripted tour.
+## Controls: Space = next turn, P = autoplay (spectator), wheel = zoom,
+## right/middle drag or WASD = pan, left click = country panel.
+## V-2a: a start screen picks a country (or spectate); the player then
+## gets the orders, country and turn-report panels (client/ui/).
+## User args: `--demo` (scripted tour), `--seed=N`, `--player=USA` or
+## `--spectate` (skip the start screen), `--selftest` (headless check).
 
 const DEG := 0.1                      # world units per degree of lon/lat
 const HOLO := Color(0.25, 1.0, 0.65)  # phosphor green
@@ -43,6 +47,23 @@ var demo_t := 0.0
 var demo_focus := Vector3.ZERO
 var mono: SystemFont
 
+const START := preload("res://ui/start.gd")
+const ORDERS := preload("res://ui/orders.gd")
+const COUNTRY := preload("res://ui/country.gd")
+const REPORT := preload("res://ui/report.gd")
+const SELFTEST := preload("res://ui/selftest.gd")
+var ui_layer: CanvasLayer
+var started := false      # past the start screen
+var player := ""          # "" = spectator
+var start_ui: PanelContainer
+var orders_ui: PanelContainer
+var country_ui: PanelContainer
+var report_ui: PanelContainer
+var over_ui: PanelContainer
+var delegating := false
+var game_over := false
+var last_report := PackedStringArray()
+
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -65,8 +86,109 @@ func _ready() -> void:
 		return
 	_place_nations()
 	_refresh()
+	var pick := "?"
+	var selftest := false
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--player="):
+			pick = a.substr(9)
+		elif a == "--spectate":
+			pick = ""
+		elif a == "--selftest":
+			selftest = true
 	if demo:
+		_begin("")
 		_demo_start()
+	elif pick != "?":
+		_begin(pick)
+	else:
+		_show_start()
+	if selftest:
+		var t: Node = SELFTEST.new()
+		t.main = self
+		add_child(t)
+		t.run()
+
+
+# ---------------------------------------------------------------- V-2a modes
+
+func _show_start() -> void:
+	start_ui = START.new()
+	start_ui.setup(sim.playable())
+	start_ui.chosen.connect(_begin)
+	ui_layer.add_child(start_ui)
+
+
+## Start the game as `code`, or as a spectator for "".
+func _begin(code: String) -> void:
+	if code != "":
+		var r: Dictionary = sim.set_player(code)
+		if not r["ok"]:
+			if start_ui != null:
+				start_ui.show_error(String(r["reason"]))
+			else:
+				push_error("BRINK: set_player(%s) refused: %s" % [code, r["reason"]])
+			return
+	player = code
+	started = true
+	if start_ui != null:
+		start_ui.queue_free()
+		start_ui = null
+	country_ui = COUNTRY.new()
+	country_ui.setup(sim, player)
+	country_ui.position = Vector2(16, 60)
+	ui_layer.add_child(country_ui)
+	if player != "":
+		orders_ui = ORDERS.new()
+		orders_ui.custom_minimum_size = Vector2(420, 648)
+		orders_ui.position = Vector2(1280 - 436, 60)
+		ui_layer.add_child(orders_ui)
+		orders_ui.setup(sim, player)
+		orders_ui.end_turn.connect(_next_turn)
+		orders_ui.delegate_turn.connect(_delegate_turn)
+		country_ui.target_chosen.connect(orders_ui.set_target)
+		report_ui = REPORT.new()
+		report_ui.setup()
+		report_ui.position = Vector2(380, 60)
+		ui_layer.add_child(report_ui)
+		country_ui.show_code(player)
+	if player != "":  # popups go bottom-centre, between the panels
+		popup.position = Vector2(362, 540)
+		popup.custom_minimum_size = Vector2(470, 150)
+		popup_text.custom_minimum_size = Vector2(300, 0)
+	ui_layer.move_child(popup, -1)  # narration popups stay on top
+	_refresh()
+
+
+## "Let the cabinet run this turn": delegate for exactly one step.
+func _delegate_turn() -> void:
+	sim.set_delegate(true)
+	delegating = true
+	_next_turn()
+
+
+func _show_game_over(reason: String) -> void:
+	over_ui = REPORT.game_over_screen(reason, sim.year(), func() -> void: get_tree().reload_current_scene())
+	ui_layer.add_child(over_ui)
+
+
+## Left click: nearest capital on screen within 28 px opens its panel
+## (and, for the player, makes it the foreign-desk target).
+func _pick(pos: Vector2) -> String:
+	var best := ""
+	var bd := 28.0
+	for code in nation_dots:
+		var w: Vector3 = capitals[code]
+		if camera.is_position_behind(w):
+			continue
+		var d := camera.unproject_position(w).distance_to(pos)
+		if d < bd:
+			bd = d
+			best = code
+	if best != "" and country_ui != null:
+		country_ui.show_code(best)
+		if orders_ui != null and best != player:
+			orders_ui.set_target(best)
+	return best
 
 
 # ---------------------------------------------------------------- scene
@@ -226,6 +348,7 @@ func _build_ui() -> void:
 	var ui := CanvasLayer.new()
 	ui.layer = 5
 	add_child(ui)
+	ui_layer = ui
 	hud = Label.new()
 	hud.add_theme_font_override("font", mono)
 	hud.add_theme_font_size_override("font_size", 18)
@@ -278,7 +401,12 @@ func _build_ui() -> void:
 # ---------------------------------------------------------------- turns
 
 func _next_turn() -> void:
+	if not started or game_over:
+		return
 	var out: Dictionary = sim.step()
+	if delegating:
+		sim.set_delegate(false)
+		delegating = false
 	for e in out["events"]:
 		_add_marker(e)
 		if e["kind"] == "nuclear":
@@ -288,6 +416,15 @@ func _next_turn() -> void:
 			popup_queue.append(n)
 	if popup_queue.size() > 6:  # keep the newest; the ledger keeps the rest
 		popup_queue = popup_queue.slice(popup_queue.size() - 6)
+	if player != "":
+		last_report = report_ui.show_turn(out, sim.year())
+		orders_ui.new_turn()
+		if out.get("game_over", false):
+			game_over = true
+			autoplay = false
+			_show_game_over(String(out.get("game_over_reason", "")))
+	if country_ui != null:
+		country_ui.refresh()
 	_refresh()
 
 
@@ -296,6 +433,15 @@ func _refresh() -> void:
 	var defcon := clampi(5 - int(gt / 20.0), 1, 5)
 	hud.text = "BRINK  %.1f   TURN %d   DEFCON %d   OIL x%.2f   RATES %.1f%%   WARS %d" % [
 		sim.year(), int((sim.year() - 1980.0) * 4.0), defcon, sim.energy_price(), sim.interest_rate(), sim.wars().size()]
+	if player != "":
+		var me: Dictionary = sim.player_state()
+		if not me.is_empty():
+			var ini: Dictionary = me["initiative"]
+			hud.text += "\n%s  STABILITY %.0f   INITIATIVE %d/%d%s   [SPACE] END TURN" % [
+				player, float(me["stability"]), int(ini["left"]), int(ini["available"]),
+				"   CRISIS: REFORM OR CRACKDOWN" if me["crisis_pending"] else ""]
+	elif started:
+		hud.text += "\nSPECTATING   [SPACE] NEXT TURN   [P] AUTOPLAY   [CLICK] COUNTRY"
 	var countries: Array = sim.countries()
 	for c in countries:
 		var dot: MeshInstance3D = nation_dots.get(c["code"])
@@ -471,6 +617,7 @@ func _show_popup(n: Dictionary) -> void:
 	popup_text.visible_characters = 0
 	popup_time = 0.0
 	popup.visible = true
+	popup.reset_size()  # shrink back to the minimum after a long line
 
 
 # ---------------------------------------------------------------- input
@@ -486,7 +633,9 @@ func _pan_keys(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		if event.button_index == MOUSE_BUTTON_LEFT and started:
+			_pick(event.position)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			target_distance = maxf(target_distance * 0.85, 1.2)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			target_distance = minf(target_distance / 0.85, 70.0)
@@ -495,7 +644,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_SPACE:
 			_next_turn()
-		elif event.keycode == KEY_P:
+		elif event.keycode == KEY_P and player == "":
 			autoplay = not autoplay
 
 

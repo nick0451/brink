@@ -44,6 +44,10 @@ pub struct Narration {
     pub fact: String,
     /// `(heading, speaker, text, line id)` when a flavour line was selected.
     pub line: Option<(String, String, String, String)>,
+    /// The hit's actor and target (who the fact is about), so a viewer's
+    /// fog can decide whether the fact is one it could know.
+    pub actor: CountryId,
+    pub target: CountryId,
 }
 
 /// A detected trigger with the values its placeholders may use.
@@ -1165,6 +1169,8 @@ impl Narrator {
                 gravity,
                 fact: h.fact,
                 line: chosen,
+                actor: h.actor,
+                target: h.target,
             });
         }
         out

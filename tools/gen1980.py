@@ -145,6 +145,9 @@ out("    inflation: 1.0,")
 out("    energy_outside_supply: OUTSIDE_SUPPLY,")
 out('    include_reflexes: ["../reflexes/1980.ron"],')
 out('    include_events: ["../events/1980.ron"],')
+# D105 #7: who a human may play first (the front-end's country list). USA and
+# USSR first; Iran and Iraq are to be added next. Presentation data only.
+out('    selectable: ["USA", "SOV"],')
 out("    countries: [")
 report = []
 for (code, name, gov, tier, area, align, pop, gdp, tax, debt_r, fw, share, land, naval, air, tm, ti, stab, legit, cost, pers, rset) in C:
